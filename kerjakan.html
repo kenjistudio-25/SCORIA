@@ -97,6 +97,15 @@ body.ac #qc .qt,body.ac #qc .op span{-webkit-user-select:none;user-select:none}
 .pf.up .sp{width:26px;height:26px;border-radius:50%;border:3px solid var(--track);border-top-color:var(--accent);animation:spn .8s linear infinite;margin:0 auto 8px}
 .pf.er{box-shadow:inset 0 0 0 2px var(--red)}.pf.er .bt{margin-top:8px;padding:6px 14px;font-size:12.5px}
 @keyframes spn{to{transform:rotate(360deg)}}
+/* ===== AXAM LOCK MODE ===== */
+body.locked{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body.locked textarea,body.locked .cell{-webkit-user-select:text;user-select:text}
+.lk{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(10,24,17,.97)}
+.lk.show{display:flex}
+.lb{width:100%;max-width:400px;text-align:center;padding:26px 22px 22px;border-radius:22px;background:#fff;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.lb .li{font-size:44px;line-height:1}.lb h2{font-size:20px;margin:8px 0 6px}.lb p{font-size:14px;color:var(--muted)}.lb .lc{margin-top:10px;font-weight:700;color:var(--red)}.lb .bt{margin-top:18px}
+.gate{max-width:480px;margin:6vh auto 0}.gate .gi{font-size:48px;line-height:1}.gate .gl{text-align:left;margin:16px 0 0 18px;font-size:14px;color:var(--text)}.gate .gl li{margin-bottom:6px}
+@media print{body{display:none!important}}
 </style>
 </head>
 <body>
@@ -107,13 +116,7 @@ body.ac #qc .qt,body.ac #qc .op span{-webkit-user-select:none;user-select:none}
 <h2 id="wmT">Waktu Anda tinggal 1 Menit Lagi</h2>
 <p id="wmD">Pastikan Anda menyelesaikan Tes sebelum waktu berakhir. Jawaban dikirim otomatis saat waktu habis.</p>
 <button class="bt pri full" id="wmB" type="button">Lanjut Mengerjakan</button></div></div>
-<div class="cm" id="cm" role="alertdialog" aria-modal="true" aria-labelledby="cmT" aria-describedby="cmD"><div class="wb">
-<div class="ic" aria-hidden="true">⚠️</div>
-<h2 id="cmT">Peringatan!</h2>
-<p id="cmD">Anda terindikasi akan melakukan kecurangan (mencontek). Apakah Anda ingin keluar dari halaman ini? Jika Anda keluar dari halaman ujian/ulangan ini, maka pekerjaan Anda dianggap selesai dan jawaban akan otomatis terkirim ke sistem.</p>
-<span class="vc" id="cmV"></span>
-<button class="bt pri full" id="cmStay" type="button">Kembali Mengerjakan</button>
-<button class="bt dg full" id="cmLeave" type="button">Keluar &amp; Kirim Jawaban</button></div></div>
+<div class="lk" id="lk" role="alertdialog" aria-modal="true" aria-labelledby="lkT" aria-describedby="lkR"><div class="lb"><div class="li">⚠️</div><h2 id="lkT">AXAM LOCK MODE</h2><p id="lkR"></p><p class="lc" id="lkC"></p><button class="bt pri full" id="lkB" type="button">Kembali ke Ujian</button></div></div>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -173,9 +176,12 @@ async function init(){
 
     KEY='madani_kerja_'+A.id+'_'+sess.id;
     try{st=JSON.parse(localStorage.getItem(KEY)||'null');}catch(_){}
-    if(!st)st={mulai:now,ans:{},flag:{},cur:0,viol:0};
-    deadline=Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime());
-    save();start();
+    gate(!st,()=>{
+      if(!st)st={mulai:Date.now(),ans:{},flag:{},cur:0,viol:0};
+      deadline=Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime());
+      const was=st.lock;st.lock=true;save();start();lockStart();
+      if(was)violate('Halaman ditutup atau dimuat ulang',true);
+    });
   }catch(e){
     const m=(e&&e.message)||String(e);
     msg('Gagal memuat soal',/permission denied/i.test(m)?'Akses data ditolak. Hubungi guru.':m,'Kembali',BACK);
@@ -203,67 +209,135 @@ function start(){
   fPr.addEventListener('cancel',pickEnd);}
   tick();timer=setInterval(tick,1000);render();
   window.addEventListener('beforeunload',e=>{if(!finished){e.preventDefault();e.returnValue='';}});
-  if(A&&A.anticheat==='aktif')antiCheat(); /* diatur lewat modal Aktifkan Soal (kolom soal_aktif.anticheat) */
 }
 
-/* ---------- Anti-cheat ----------
-   Browser tidak mungkin memblokir siswa berpindah aplikasi/tab (Alt+Tab, tombol Home, notifikasi, split screen).
-   Yang bisa dilakukan: mendeteksi lalu mencatat, dan menampilkan peringatan begitu siswa kembali ke halaman ini. */
-let away=false,fsWanted=false,mediaFs=false,acOn=false;
+/* ================= AXAM LOCK MODE =================
+   Catatan: web/PWA tidak bisa mengunci perangkat. Modul ini memaksa layar penuh,
+   mendeteksi pelanggaran (pindah tab/aplikasi, geser tutup layar, keluar layar penuh, tombol Kembali),
+   mengunci tampilan dengan peringatan, lalu auto-kirim di pelanggaran ke-MAX. */
+const LOCK={MAX:3,DELAY:4,GRACE:1500,BLUR_MS:900};
 const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement||null;
-function reqFs(){
-  const de=document.documentElement,f=de.requestFullscreen||de.webkitRequestFullscreen;
-  if(!f||fsEl())return;
-  try{const p=f.call(de);if(p&&p.then)p.then(()=>{fsWanted=true;}).catch(()=>{});else fsWanted=true;}catch(_){}
+const fsCan=()=>!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+const fsReq=()=>{const e=document.documentElement,f=e.requestFullscreen||e.webkitRequestFullscreen;return f?Promise.resolve(f.call(e)):Promise.reject(new Error('nofs'));};
+let lockOn=false,lockOpen=false,lockPause=false,lockFs=false,lockBound=false,lockOut=false,mediaFs=false;
+let lockGrace=0,lockLast=0,lockWL=null,lockBlurT=null,lockRT=null;
+
+async function wake(){
+  if(!('wakeLock' in navigator)||lockWL)return;
+  try{const w=await navigator.wakeLock.request('screen');lockWL=w;w.addEventListener('release',()=>{if(lockWL===w)lockWL=null;});}catch(_){}
 }
-function onLeave(){
-  if(finished||busy||away||picking)return;
-  away=true;st.viol=(+st.viol||0)+1;save();
+async function lockEnter(){
+  lockGrace=Date.now()+LOCK.GRACE;
+  try{await fsReq();lockFs=true;}catch(_){}
+  try{if(navigator.keyboard&&navigator.keyboard.lock)navigator.keyboard.lock(['Escape']).catch(()=>{});}catch(_){}
+  await wake();
+  lockGrace=Date.now()+LOCK.GRACE;
 }
-function onBack(){
-  if(!away||finished||busy||document.hidden)return;
-  showCheat();
+function lockOff(){
+  lockOn=false;lockOpen=false;clearTimeout(lockBlurT);clearInterval(lockRT);
+  $('lk').classList.remove('show');document.body.classList.remove('locked');
+  try{if(lockWL)lockWL.release();}catch(_){}lockWL=null;
+  try{if(navigator.keyboard&&navigator.keyboard.unlock)navigator.keyboard.unlock();}catch(_){}
+  try{if(fsEl()){const x=document.exitFullscreen||document.webkitExitFullscreen;Promise.resolve(x.call(document)).catch(()=>{});}}catch(_){}
 }
-function showCheat(){
-  const c=$('cm');if(c.classList.contains('show'))return;
-  hideWarn();
-  $('cmV').textContent='Pelanggaran tercatat: '+st.viol+'×';
-  c.classList.add('show');$('cmStay').focus({preventScroll:true});
+function lockStart(){
+  lockOn=true;document.body.classList.add('locked');
+  try{history.pushState(null,'',location.href);}catch(_){}
+  lockBind();
 }
-function hideCheat(){$('cm').classList.remove('show');}
-function antiCheat(){
-  if(acOn)return;acOn=true;document.body.classList.add('ac');
-  /* pindah tab / aplikasi / minimize / layar terkunci */
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)onLeave();else onBack();});
-  /* pindah jendela (mis. split screen). Fokus ke iframe video soal (YouTube/Drive) bukan pelanggaran. */
-  window.addEventListener('blur',()=>setTimeout(()=>{
-    const a=document.activeElement;if(a&&a.tagName==='IFRAME')return;
-    if(!document.hasFocus())onLeave();
-  },0));
-  window.addEventListener('focus',onBack);
-  /* keluar dari layar penuh (Esc) = dianggap mencoba keluar; layar penuh milik video soal tidak dihitung */
+function showLock(reason,soft){
+  lockOpen=true;hideWarn();
+  $('lkR').textContent=reason+'.';
+  $('lkC').textContent=soft?'Tidak dihitung sebagai pelanggaran.':'Pelanggaran '+st.viol+' dari '+LOCK.MAX+'. Pada pelanggaran ke-'+LOCK.MAX+' jawabanmu dikirim otomatis dan ujian dikunci.';
+  const b=$('lkB');let d=soft?0:LOCK.DELAY;
+  const label=()=>{b.disabled=d>0;b.textContent=d>0?'Kembali ke Ujian ('+d+')':'Kembali ke Ujian';};
+  label();clearInterval(lockRT);
+  if(d>0)lockRT=setInterval(()=>{d--;label();if(d<=0)clearInterval(lockRT);},1000);
+  $('lk').classList.add('show');
+}
+function violate(reason,quiet){
+  if(!lockOn||finished||busy||lockPause||lockOpen||picking)return;
+  const n=Date.now();
+  if(!quiet&&(n<lockGrace||n-lockLast<LOCK.GRACE))return;
+  lockLast=n;st.viol=(st.viol||0)+1;catatPelanggaran(reason,st.viol>=LOCK.MAX);save();
+  if(st.viol>=LOCK.MAX){lockOut=true;toast('Batas pelanggaran tercapai. Jawaban dikirim otomatis.');submit();return;}
+  if(quiet){toast(reason+'. Dicatat sebagai pelanggaran '+st.viol+' dari '+LOCK.MAX+'.');return;}
+  showLock(reason,false);
+}
+/* ---------- Catat pelanggaran ke tabel ujian_berlangsung (kolom status & keterangan) ---------- */
+const KET_MAP={'Kamu berpindah tab atau aplikasi':'Berpindah tab/aplikasi atau menggeser layar untuk menutup','Halaman ujian kehilangan fokus':'Halaman ujian kehilangan fokus (pindah jendela/aplikasi)','Kamu keluar dari layar penuh':'Keluar dari layar penuh','Kamu menekan tombol Kembali':'Menekan tombol Kembali','Mencoba mengambil screenshot':'Mencoba mengambil screenshot','Halaman ditutup atau dimuat ulang':'Halaman ditutup atau dimuat ulang'};
+const ketOf=r=>KET_MAP[r]||r;
+let ujP=Promise.resolve();
+function ujSync(patch){
+  if(!ses||!ses.ujian_id)return;
+  ujP=ujP.then(()=>db.from('ujian_berlangsung').update(patch).eq('id',ses.ujian_id)).then(r=>{if(r&&r.error)console.warn('ujian_berlangsung:',r.error.message);}).catch(()=>{});
+}
+function catatPelanggaran(reason,kunci){
+  st.ket=Array.isArray(st.ket)?st.ket:[];
+  const d=new Date(),t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
+  st.ket.push(ketOf(reason)+' ('+t+')');
+  let k=st.ket.map((x,i)=>(i+1)+'. '+x).join('; ');
+  if(kunci)k+='. Batas pelanggaran tercapai, ujian dikunci dan jawaban dikirim otomatis.';
+  ujSync({status:'Pelanggaran',keterangan:k});
+}
+function lockConfirm(m){
+  lockPause=true;let r=false;
+  try{r=confirm(m);}finally{lockGrace=Date.now()+LOCK.GRACE;lockPause=false;}
+  if(!r&&lockOn&&lockFs&&!fsEl())showLock('Layar penuh perlu diaktifkan kembali',true);
+  return r;
+}
+function gate(fresh,cb){
+  $('tm').hidden=true;
+  const prev=st&&st.viol?'<li>Pelanggaran sebelumnya: <b>'+st.viol+'</b> dari '+LOCK.MAX+'.</li>':'';
+  app.innerHTML='<div class="card st gate"><div class="gi">🔒</div><h2>AXAM LOCK MODE</h2><p>'+(fresh?'Ujian berjalan dalam mode terkunci.':'Lanjutkan ujianmu. Waktu tetap berjalan sejak kamu mulai.')+'</p>'+
+    '<ul class="gl"><li>'+(fsCan()?'Layar penuh akan diaktifkan.':'Perangkat ini tidak mendukung layar penuh. Buka lewat ikon aplikasi di Layar Utama (PWA) agar lebih aman.')+'</li>'+
+    '<li>Jangan pindah tab/aplikasi, jangan geser layar untuk menutup, jangan keluar layar penuh, dan jangan tekan tombol Kembali.</li>'+
+    '<li>Setiap pelanggaran dicatat dan dilihat oleh gurumu. Pelanggaran ke-'+LOCK.MAX+': ujian dikunci dan jawaban dikirim otomatis.</li>'+
+    '<li>Waktu ujian tidak berhenti saat layar terkunci.</li>'+prev+'</ul>'+
+    '<button class="bt pri full" id="gB" type="button" style="margin-top:18px">'+(fresh?'Mulai Ujian':'Lanjutkan Ujian')+'</button></div>';
+  $('gB').onclick=async()=>{$('gB').disabled=true;await lockEnter();cb();};
+}
+function lockBind(){
+  if(lockBound)return;lockBound=true;
+  $('lkB').onclick=async()=>{await lockEnter();lockOpen=false;lockLast=Date.now();$('lk').classList.remove('show');};
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)violate('Kamu berpindah tab atau aplikasi');else wake();
+  });
+  window.addEventListener('blur',()=>{
+    clearTimeout(lockBlurT);
+    lockBlurT=setTimeout(()=>{
+      const a=document.activeElement;
+      if(a&&a.tagName==='IFRAME')return; /* fokus ke video YouTube/Drive di dalam soal */
+      if(!document.hasFocus())violate('Halaman ujian kehilangan fokus');
+    },LOCK.BLUR_MS);
+  });
+  window.addEventListener('focus',()=>clearTimeout(lockBlurT));
   const fsch=()=>{
     const e=fsEl();
-    if(e&&e!==document.documentElement){mediaFs=true;return;}
-    if(e){fsWanted=true;return;}
-    if(mediaFs){mediaFs=false;if(!finished)reqFs();return;}
-    if(fsWanted&&!finished&&!busy){onLeave();onBack();}
+    if(e&&e!==document.documentElement){mediaFs=true;return;} /* layar penuh milik video soal tidak dihitung */
+    if(!e&&mediaFs){mediaFs=false;if(lockOn&&!finished&&!busy&&lockFs)showLock('Layar penuh perlu diaktifkan kembali',true);return;}
+    if(lockOn&&lockFs&&!e)violate('Kamu keluar dari layar penuh');
   };
-  document.addEventListener('fullscreenchange',fsch);document.addEventListener('webkitfullscreenchange',fsch);
-  /* masuk layar penuh pada interaksi pertama (browser mewajibkan gestur pengguna) */
-  const first=()=>{document.removeEventListener('pointerdown',first,true);document.removeEventListener('keydown',first,true);reqFs();};
-  document.addEventListener('pointerdown',first,true);document.addEventListener('keydown',first,true);
-  /* pilihan di modal */
-  $('cmStay').onclick=()=>{away=false;hideCheat();reqFs();};
-  $('cmLeave').onclick=()=>{away=false;hideCheat();timeUp=false;submit();};
-  /* batasi salin / klik kanan / pintasan umum (di luar kolom jawaban) */
-  const editable=t=>t&&t.closest&&t.closest('input,textarea');
-  ['copy','cut','contextmenu','dragstart'].forEach(ev=>document.addEventListener(ev,e=>{if(finished||editable(e.target))return;e.preventDefault();}));
+  ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,fsch));
+  window.addEventListener('popstate',()=>{
+    if(!lockOn)return;
+    try{history.pushState(null,'',location.href);}catch(_){}
+    violate('Kamu menekan tombol Kembali');
+  });
   document.addEventListener('keydown',e=>{
-    if(finished)return;
-    const k=(e.key||'').toLowerCase(),c=e.ctrlKey||e.metaKey;
-    if(e.key==='F12'||(c&&e.shiftKey&&'ijc'.includes(k))||(c&&'usp'.includes(k))||(c&&!editable(e.target)&&('ca'.includes(k)&&k.length===1)))e.preventDefault();
+    if(!lockOn)return;
+    const k=String(e.key||'').toLowerCase(),c=e.ctrlKey||e.metaKey;
+    if(e.key==='F12'||(c&&e.shiftKey&&(k==='i'||k==='j'||k==='c'))||(c&&(k==='u'||k==='s'||k==='p'))){e.preventDefault();toast('Tombol ini dinonaktifkan selama ujian.');}
   },true);
+  document.addEventListener('keyup',e=>{
+    if(lockOn&&e.key==='PrintScreen'){try{navigator.clipboard.writeText('');}catch(_){}violate('Mencoba mengambil screenshot');}
+  });
+  ['contextmenu','copy','cut','dragstart','paste'].forEach(ev=>document.addEventListener(ev,e=>{
+    if(!lockOn)return;
+    const t=e.target,edit=t&&(t.tagName==='TEXTAREA'||t.tagName==='INPUT');
+    if(edit&&(ev==='copy'||ev==='cut'||ev==='paste'))return; /* kolom jawaban tetap boleh (paste TTS ditangani onPaste) */
+    e.preventDefault();e.stopImmediatePropagation();
+  },true));
 }
 
 function go(i){if(i<0||i>=Q.length)return;st.cur=i;save();render();window.scrollTo({top:0,behavior:'smooth'});}
@@ -397,7 +471,7 @@ window.addEventListener('focus',()=>{if(picking)pickEnd();});
 const isPrak=()=>!!(P&&P.bentuk==='praktikum');
 /* Toleransi (buka PDF jobdesk / kamera / galeri) hanya berlaku di paket bentuk praktikum; bentuk lain tetap dihitung pelanggaran */
 function pickStart(){if(!isPrak())return;picking=true;clearTimeout(pickTo);pickTo=setTimeout(()=>{picking=false;},180000);}
-function pickEnd(){clearTimeout(pickTo);pickTo=setTimeout(()=>{picking=false;if(acOn&&!fsEl())reqFs();},1500);}
+function pickEnd(){clearTimeout(pickTo);pickTo=setTimeout(()=>{picking=false;if(lockOn&&lockFs&&!finished&&!busy&&!fsEl())showLock('Layar penuh perlu diaktifkan kembali',true);},1500);}
 function prSrc(f){return f.local?(loc[f.id]&&loc[f.id].url)||'':f.u;}
 function prCard(f,k){
   const src=prSrc(f);
@@ -530,7 +604,7 @@ function ask(){
   let t='Kirim jawaban sekarang?';
   if(k)t='Masih ada '+k+' soal yang belum dijawab.\n'+t;
   if(f)t+='\n('+f+' soal masih ditandai ragu-ragu)';
-  if(confirm(t+'\nSetelah dikirim, jawaban tidak dapat diubah.'))submit();
+  if(lockConfirm(t+'\nSetelah dikirim, jawaban tidak dapat diubah.'))submit();
 }
 
 /* ---------- Simpan nilai ke tabel nilai_kelas_<kelas> ---------- */
@@ -594,8 +668,8 @@ async function simpanKeNilaiKelas(nilai){
 }
 
 async function submit(){
-  if(busy||finished)return;busy=true;clearInterval(timer);hideWarn();hideCheat();
-  app.innerHTML='<div class="card st"><h2>'+(timeUp?'Waktu habis':'Mengirim jawaban…')+'</h2><p>'+(timeUp?'Jawaban yang sudah kamu isi sedang dikirim. Jangan tutup halaman ini.':'Jangan tutup halaman ini.')+'</p></div>';
+  if(busy||finished)return;busy=true;clearInterval(timer);hideWarn();lockOff();
+  app.innerHTML='<div class="card st"><h2>'+(timeUp?'Waktu habis':lockOut?'Ujian dikunci':'Mengirim jawaban…')+'</h2><p>'+(timeUp||lockOut?'Jawaban yang sudah kamu isi sedang dikirim. Jangan tutup halaman ini.':'Jangan tutup halaman ini.')+'</p></div>';
   $('tm').hidden=true;document.querySelector('.bar')&&document.querySelector('.bar').remove();
   if(pending.size){await Promise.race([Promise.all(Array.from(pending)),new Promise(r=>setTimeout(r,60000))]);}
   try{
@@ -636,15 +710,18 @@ async function submit(){
   let nl=null;
   if(!dup&&nilai!==null){try{nl=await simpanKeNilaiKelas(nilai);}catch(e){nl={ok:false,msg:(e&&e.message)||String(e)};}}
   finished=true;
+  {const d=new Date(),jm=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
+   ujSync((st.viol||0)>0?{jam_selesai:jm}:{status:'Selesai',jam_selesai:jm});} /* ada pelanggaran: status tetap Pelanggaran */
+  await Promise.race([ujP,new Promise(r=>setTimeout(r,3000))]);
   if(saved){try{localStorage.removeItem(KEY);}catch(_){}try{sessionStorage.removeItem('madani_asesmen');}catch(_){}}
   done({nilai:nilai,skor_otomatis:skor,skor_maks:maks,perlu_koreksi:essay},false,saved,nl);
 }
 function done(r,already,saved,nl){
-  finished=true;hideCheat();document.body.classList.remove('ac');
-  try{if(fsEl())(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch(_){}
+  finished=true;lockOff();
   $('tm').hidden=true;const bar=document.querySelector('.bar');if(bar)bar.remove();
   const kor=P&&P.bentuk==='praktikum'?'Hasil praktikmu akan dinilai oleh gurumu.':'Soal uraian akan dinilai oleh gurumu.';
   let h='<div class="card st"><h2>'+(already?'Kamu sudah mengerjakan asesmen ini':'Jawaban terkirim ✓')+'</h2>';
+  if(lockOut&&!already)h+='<p style="color:var(--red);margin-bottom:6px">Ujian dikunci karena pelanggaran mencapai batas ('+LOCK.MAX+'x). Jawaban terkirim otomatis.</p>';
   if(SHOW_NILAI&&r.nilai!=null){
     h+='<div class="big">'+r.nilai+'</div><p>Skor '+r.skor_otomatis+' dari '+r.skor_maks+(P&&P.kkm!=null?' · KKM '+P.kkm:'')+'</p>';
     if(r.perlu_koreksi)h+='<p style="margin-top:6px">Nilai sementara. '+kor+'</p>';
