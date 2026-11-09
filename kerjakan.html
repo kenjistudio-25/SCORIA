@@ -193,7 +193,7 @@ async function init(){
       if(!st)st={mulai:Date.now(),ans:{},flag:{},cur:0,viol:0};
       deadline=Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime());
       const was=st.lock;st.lock=true;save();start();lockStart();
-      adoptRow();stopWatch();
+      adoptRow();ujDedupe();stopWatch();
       chkStop().then(()=>{if(was&&!stopped)violate('Halaman ditutup atau dimuat ulang',true);});
     });
   }catch(e){
@@ -304,6 +304,14 @@ function adoptRow(){
   if(nid&&String(nid)!==String(resumeRow.id)){try{db.from('ujian_berlangsung').delete().eq('id',nid).then(()=>{},()=>{});}catch(_){}}
   ses.ujian_id=resumeRow.id;
   try{sessionStorage.setItem('madani_asesmen',JSON.stringify(ses));}catch(_){}
+}
+/* Hapus baris ganda siswa yang sama (kategori ujian sama) yang masih 'Mengerjakan', selain baris yang sedang dipakai.
+   Muncul saat siswa masuk lagi lewat asesmen.html (baris baru) atau setelah dilanjutkan guru. */
+function ujDedupe(){
+  if(!ses||!ses.ujian_id||!ID.nisn)return;
+  const keep=ses.ujian_id;
+  ujP=ujP.then(()=>db.from('ujian_berlangsung').delete().eq('nisn',ID.nisn).eq('jenis_ujian',ID.kategori).eq('status','Mengerjakan').neq('id',keep))
+    .then(r=>{if(r&&r.error)console.warn('dedupe:',r.error.message);}).catch(()=>{});
 }
 /* ---------- Pengawas menghentikan ujian (slider di pantauujian.html): siswa keluar paksa & jawaban dikirim otomatis ----------
    Penanda: status = Pelanggaran DAN keterangan persis salah satu pilihan pengawas (keterangan pelanggaran otomatis siswa selalu berformat "1. ..."). */
@@ -773,7 +781,7 @@ async function submit(){
   if(!dup&&nilai!==null){try{nl=await simpanKeNilaiKelas(nilai);}catch(e){nl={ok:false,msg:(e&&e.message)||String(e)};}}
   finished=true;
   {const d=new Date(),jm=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
-   if(!stopped){ujSync({status:'Selesai',jam_selesai:jm},'mg');ujSync({jam_selesai:jm});}} /* ada pelanggaran: status tetap Pelanggaran */
+   if(!stopped){ujDedupe();ujSync({status:'Selesai',jam_selesai:jm},'mg');ujSync({jam_selesai:jm});}} /* ada pelanggaran: status tetap Pelanggaran */
   await Promise.race([ujP,new Promise(r=>setTimeout(r,3000))]);
   if(saved){try{localStorage.removeItem(KEY);}catch(_){}try{sessionStorage.removeItem('madani_asesmen');}catch(_){}}
   done({nilai:nilai,skor_otomatis:skor,skor_maks:maks,perlu_koreksi:essay},false,saved,nl);
