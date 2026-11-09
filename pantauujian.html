@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pantau Ujian — Scoria</title>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --text:#0f2233;--muted:#4d6a80;--accent:#3d9be0;--green:#1f9d3a;--orange:#c77700;--red:#d92d20;
+  --glass:rgba(255,255,255,.72);--card:rgba(255,255,255,.88);--line:rgba(0,0,0,.1);--bar:rgba(255,255,255,.6);--track:rgba(120,120,128,.16);
+  --wall:linear-gradient(135deg,#97D7FF 0%,#c3e6ff 38%,#e3f3ff 70%,#fdf1d0 100%);
+  --shadow:0 14px 40px rgba(30,30,80,.2),0 0 0 .5px rgba(0,0,0,.14);
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);color:var(--text);background:var(--wall) fixed;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:10px}
+
+/* Navbar */
+.nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:8px 20px;padding-top:calc(8px + env(safe-area-inset-top));
+  background:var(--bar);backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px);border-bottom:.5px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;min-width:0}
+.logo{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;overflow:hidden;background:linear-gradient(160deg,#b9e5ff,#6fc2f6);color:#0b2a42;font-weight:800;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 2px 6px rgba(0,0,0,.22)}
+.logo img{width:100%;height:100%;object-fit:contain;background:#08141d}
+.sname{display:block;min-width:0;line-height:1.2}
+.sname b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sname small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
+.sp{flex:1}
+.live{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted);padding:6px 12px;border-radius:99px;background:var(--track)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(31,157,58,.5);animation:pl 1.8s infinite}
+.live.off i{background:#999;animation:none}
+@keyframes pl{70%{box-shadow:0 0 0 7px rgba(31,157,58,0)}100%{box-shadow:0 0 0 0 rgba(31,157,58,0)}}
+
+/* Layout */
+.wrap{max-width:1200px;margin:0 auto;padding:22px 20px}
+.head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:10px;margin-bottom:16px}
+h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
+.head p{color:var(--muted);font-size:14px;margin-top:4px}
+.chip{font-size:13px;font-weight:600;padding:6px 14px;border-radius:99px;background:var(--glass);box-shadow:0 0 0 .5px var(--line)}
+.panel{background:var(--glass);backdrop-filter:saturate(180%) blur(30px);-webkit-backdrop-filter:saturate(180%) blur(30px);border-radius:16px;box-shadow:var(--shadow)}
+.box{padding:18px}
+
+/* Filter */
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.tools select,.tools input{font:inherit;color:var(--text);padding:10px 13px;border-radius:12px;border:1px solid var(--line);background:var(--card);min-width:0}
+.tools select:focus,.tools input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,166,230,.2)}
+.tools .search{flex:1 1 220px}
+.tools .search input{width:100%}
+.tools .tg{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+
+/* Tab */
+.tabs{display:flex;gap:6px;padding:5px;border-radius:14px;background:var(--track);margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1 1 0;min-width:max-content;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;border-radius:10px;font-weight:700;font-size:14px;color:var(--muted);white-space:nowrap;transition:background .15s,color .15s}
+.tab[aria-selected="true"]{background:#fff;color:var(--text);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.tab .n{min-width:24px;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:800;background:rgba(0,0,0,.08);color:var(--text)}
+.tab[data-k="Mengerjakan"][aria-selected="true"] .n{background:rgba(199,119,0,.16);color:var(--orange)}
+.tab[data-k="Selesai"][aria-selected="true"] .n{background:rgba(31,157,58,.16);color:var(--green)}
+.tab[data-k="Pelanggaran"][aria-selected="true"] .n{background:rgba(217,45,32,.16);color:var(--red)}
+
+/* Tabel */
+.tw{overflow-x:auto;border-radius:14px;background:var(--card);box-shadow:0 0 0 .5px var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{position:sticky;top:0;text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:11px 12px;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:11px 12px;border-bottom:.5px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.nm{font-weight:700}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ket{min-width:220px;font-size:13px;color:#7a1d14}
+.bdg{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.bdg.Mengerjakan{background:rgba(199,119,0,.14);color:var(--orange)}
+.bdg.Selesai{background:rgba(31,157,58,.14);color:var(--green)}
+.bdg.Pelanggaran{background:rgba(217,45,32,.14);color:var(--red)}
+.empty{padding:34px 14px;text-align:center;color:var(--muted);font-size:14px}
+.err{color:var(--red)}
+.upd{font-size:12px;color:var(--muted);margin-top:10px;text-align:right}
+
+/* Dock */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;padding:0 14px calc(12px + env(safe-area-inset-bottom));pointer-events:none}
+.dock nav{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 16px;border-radius:34px;background:rgba(255,255,255,.55);backdrop-filter:saturate(180%) blur(30px);-webkit-backdrop-filter:saturate(180%) blur(30px);box-shadow:var(--shadow)}
+.d{display:grid;place-items:center;border-radius:15px;transition:transform .2s;position:relative}
+.d:hover{transform:translateY(-6px) scale(1.1)}
+.d:active{transform:scale(.94)}
+.d .ic{width:56px;height:56px;border-radius:15px;display:grid;place-items:center;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.4)}
+.d .ic svg{width:28px;height:28px}
+.d[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 12px);transform:translate(-50%,4px);padding:6px 11px;border-radius:8px;background:#000;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s}
+@media (hover:hover){.d[data-tip]:hover::after{opacity:1;visibility:visible;transform:translate(-50%,0)}}
+.d.spin .ic svg{animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* HP: tabel jadi kartu */
+@media (max-width:720px){
+  .nav{padding:8px 8px;padding-top:calc(8px + env(safe-area-inset-top))}
+  .wrap{padding:14px 8px}
+  .box{padding:10px}
+  .sname small{display:none}
+  .tools select,.tools input{flex:1 1 40%}
+  .tools .search{flex:1 1 100%}
+  .tw{background:none;box-shadow:none;overflow:visible}
+  table,tbody,tr,td{display:block;width:100%}
+  thead{display:none}
+  tr{margin-bottom:10px;padding:10px 12px;border-radius:14px;background:var(--card);box-shadow:0 0 0 .5px var(--line)}
+  td{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border:0;text-align:right}
+  td::before{content:attr(data-l);flex:none;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding-top:2px}
+  td.nm{font-size:15px}
+  td.ket{min-width:0}
+  td.ket::before{align-self:flex-start}
+  .d .ic{width:50px;height:50px;border-radius:14px}
+  .d .ic svg{width:25px;height:25px}
+}
+@media (prefers-reduced-motion:reduce){.live i,.d.spin .ic svg{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="brand">
+    <span class="logo" id="logo" aria-hidden="true">S</span>
+    <span class="sname"><b id="navTitle">Scoria</b><small>Pantau Ujian</small></span>
+  </div>
+  <span class="sp"></span>
+  <span class="live" id="live" role="status"><i></i><span id="liveTxt">Memuat…</span></span>
+</header>
+
+<main class="wrap">
+  <div class="head">
+    <div>
+      <h1>Pantau Ujian</h1>
+      <p>Siswa yang sedang, sudah, atau bermasalah saat mengerjakan ujian.</p>
+    </div>
+    <span class="chip" id="chipTotal">0 siswa</span>
+  </div>
+
+  <section class="panel box" aria-label="Daftar siswa ujian">
+    <div class="tools">
+      <input id="fTgl" type="date" aria-label="Tanggal ujian">
+      <select id="fKelas" aria-label="Filter kelas"><option value="">Semua kelas</option></select>
+      <div class="search"><input id="fQ" type="search" placeholder="Cari nama atau NISN…" aria-label="Cari nama atau NISN"></div>
+      <label class="tg"><input type="checkbox" id="fAuto" checked> Perbarui otomatis</label>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Status ujian">
+      <button class="tab" role="tab" id="tab-Mengerjakan" data-k="Mengerjakan" aria-selected="true" aria-controls="panelList">Sedang Mengerjakan <span class="n" id="n-Mengerjakan">0</span></button>
+      <button class="tab" role="tab" id="tab-Selesai" data-k="Selesai" aria-selected="false" aria-controls="panelList" tabindex="-1">Selesai <span class="n" id="n-Selesai">0</span></button>
+      <button class="tab" role="tab" id="tab-Pelanggaran" data-k="Pelanggaran" aria-selected="false" aria-controls="panelList" tabindex="-1">Pelanggaran <span class="n" id="n-Pelanggaran">0</span></button>
+    </div>
+
+    <div id="panelList" role="tabpanel"><div class="empty">Memuat…</div></div>
+    <p class="upd" id="upd"></p>
+  </section>
+</main>
+
+<div class="dock">
+  <nav aria-label="Menu">
+    <a class="d" data-tip="Kembali ke Soal" aria-label="Kembali ke Soal" href="soal.html"><span class="ic" style="background:linear-gradient(160deg,#b9e5ff,#6fc2f6);color:#0b2a42"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span></a>
+    <button class="d" id="bRef" type="button" data-tip="Perbarui" aria-label="Perbarui"><span class="ic" style="background:linear-gradient(160deg,#38bdf8,#0369a1)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 11-2.4-5.7M20 4v5h-5"/></svg></span></button>
+  </nav>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+  var SB_URL='https://vvlngdwghdhrrnpczier.supabase.co';
+  var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bG5nZHdnaGRocnJucGN6aWVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDI1MzgsImV4cCI6MjEwNzk3ODUzOH0.kV3y6rUu0NKbV451dvD4SkeZRJtuLNzwoA81tUY8jiA';
+  var POLL_MS=10000;
+  var db=window.supabase.createClient(SB_URL,SB_KEY);
+  var $=function(i){return document.getElementById(i);};
+  var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+  var natSort=function(a,b){return String(a).localeCompare(String(b),'id',{numeric:true});};
+  var TABS=['Mengerjakan','Selesai','Pelanggaran'];
+  var EMPTY={Mengerjakan:'Belum ada siswa yang sedang mengerjakan ujian.',Selesai:'Belum ada siswa yang selesai mengerjakan ujian.',Pelanggaran:'Tidak ada siswa yang melakukan pelanggaran.'};
+  var rows=[],tab='Mengerjakan',timer=null,loading=false,loadErr='';
+
+  function pad(n){return (n<10?'0':'')+n;}
+  function todayStr(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+  function fmtTgl(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:(s||'-');}
+  function fmtJam(s){return s?String(s).slice(0,8):'-';}
+
+  /* ---------- Navbar: nama sekolah & logo dari tabel profil ---------- */
+  async function loadProfil(){
+    try{
+      var r=await db.from('profil').select('nama_sekolah,logo_url').order('id',{ascending:true}).limit(1).maybeSingle();
+      if(r.error||!r.data)return;
+      if(r.data.nama_sekolah)$('navTitle').textContent=r.data.nama_sekolah;
+      if(r.data.logo_url){var im=new Image();im.alt='';im.onload=function(){$('logo').textContent='';$('logo').appendChild(im);};im.src=r.data.logo_url;}
+    }catch(_){}
+  }
+
+  /* ---------- Ambil data ---------- */
+  async function load(manual){
+    if(loading)return;loading=true;
+    var b=$('bRef');if(manual)b.classList.add('spin');
+    try{
+      var q=db.from('ujian_berlangsung').select('*').order('id',{ascending:false}).range(0,999);
+      var tgl=$('fTgl').value;if(tgl)q=q.eq('tanggal',tgl);
+      var r=await q;
+      if(r.error)throw r.error;
+      rows=r.data||[];loadErr='';
+      $('live').classList.remove('off');$('liveTxt').textContent='Langsung';
+      $('upd').textContent='Diperbarui '+new Date().toLocaleTimeString('id-ID')+(tgl?' · tanggal '+fmtTgl(tgl):' · semua tanggal');
+    }catch(e){
+      var m=(e&&e.message)||String(e);
+      loadErr=/does not exist|schema cache|Could not find the table/i.test(m)?'Tabel ujian_berlangsung belum ada di Supabase. Jalankan ujian_berlangsung.sql di SQL Editor.':/permission denied/i.test(m)?'Akses data ditolak. Periksa RLS dan grant tabel ujian_berlangsung.':m;
+      $('live').classList.add('off');$('liveTxt').textContent='Terputus';
+    }finally{loading=false;b.classList.remove('spin');}
+    render();
+  }
+
+  /* ---------- Tampilan ---------- */
+  function buildKelas(){
+    var sel=$('fKelas'),cur=sel.value,set={};
+    rows.forEach(function(r){if(r.kelas)set[r.kelas]=1;});
+    var ks=Object.keys(set).sort(natSort);
+    if(cur&&!set[cur])ks.push(cur);
+    sel.innerHTML='<option value="">Semua kelas</option>'+ks.map(function(k){return '<option value="'+esc(k)+'">'+esc(k)+'</option>';}).join('');
+    sel.value=cur;
+  }
+  function filtered(){
+    var kl=$('fKelas').value,q=$('fQ').value.trim().toLowerCase();
+    return rows.filter(function(r){
+      if(kl&&r.kelas!==kl)return false;
+      if(q&&String(r.nama_siswa||'').toLowerCase().indexOf(q)<0&&String(r.nisn||'').toLowerCase().indexOf(q)<0)return false;
+      return true;
+    });
+  }
+  function render(){
+    buildKelas();
+    var all=filtered(),cnt={Mengerjakan:0,Selesai:0,Pelanggaran:0};
+    all.forEach(function(r){if(cnt[r.status]!==undefined)cnt[r.status]++;});
+    TABS.forEach(function(k){$('n-'+k).textContent=cnt[k];});
+    $('chipTotal').textContent=all.length+' siswa';
+    var list=all.filter(function(r){return r.status===tab;}),el=$('panelList');
+    el.setAttribute('aria-labelledby','tab-'+tab);
+    if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
+    if(!list.length){el.innerHTML='<div class="empty">'+(rows.length&&all.length===0?'Tidak ada data yang cocok dengan filter.':EMPTY[tab])+'</div>';return;}
+    var ket=tab==='Pelanggaran';
+    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th>':'')+'</tr></thead><tbody>'+
+      list.map(function(r,i){
+        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="nm" data-l="Nama">'+esc(r.nama_siswa)+'</td><td data-l="NISN">'+esc(r.nisn)+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td><td data-l="Jenis Ujian">'+esc(r.jenis_ujian)+'</td><td data-l="Tanggal">'+fmtTgl(r.tanggal)+'</td><td class="num" data-l="Jam Mulai">'+fmtJam(r.jam_mulai)+'</td><td class="num" data-l="Jam Selesai">'+fmtJam(r.jam_selesai)+'</td><td data-l="Status"><span class="bdg '+esc(r.status)+'">'+esc(r.status)+'</span></td>'+(ket?'<td class="ket" data-l="Keterangan">'+(esc(r.keterangan)||'-')+'</td>':'')+'</tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+
+  /* ---------- Tab ---------- */
+  function setTab(k,focus){
+    tab=k;
+    TABS.forEach(function(t){var b=$('tab-'+t),on=t===k;b.setAttribute('aria-selected',on?'true':'false');b.tabIndex=on?0:-1;if(on&&focus)b.focus();});
+    render();
+  }
+  document.querySelector('.tabs').addEventListener('click',function(e){var b=e.target.closest('.tab');if(b)setTab(b.dataset.k);});
+  document.querySelector('.tabs').addEventListener('keydown',function(e){
+    var i=TABS.indexOf(tab);
+    if(e.key==='ArrowRight')setTab(TABS[(i+1)%TABS.length],true);
+    else if(e.key==='ArrowLeft')setTab(TABS[(i+TABS.length-1)%TABS.length],true);
+    else if(e.key==='Home')setTab(TABS[0],true);
+    else if(e.key==='End')setTab(TABS[TABS.length-1],true);
+    else return;
+    e.preventDefault();
+  });
+
+  /* ---------- Filter & auto-refresh ---------- */
+  $('fKelas').addEventListener('change',render);
+  $('fQ').addEventListener('input',render);
+  $('fTgl').addEventListener('change',function(){load();});
+  $('bRef').addEventListener('click',function(){load(true);});
+  function startPoll(){stopPoll();if($('fAuto').checked)timer=setInterval(function(){if(!document.hidden)load();},POLL_MS);}
+  function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
+  $('fAuto').addEventListener('change',function(){startPoll();$('live').classList.toggle('off',!$('fAuto').checked);$('liveTxt').textContent=$('fAuto').checked?'Langsung':'Jeda';});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden&&$('fAuto').checked)load();});
+
+  $('fTgl').value=todayStr();
+  loadProfil();load();startPoll();
+})();
+</script>
+</body>
+</html>
