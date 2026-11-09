@@ -141,6 +141,7 @@ const pid=+new URLSearchParams(location.search).get('paket');
 const KAT={UH:'Ulangan Harian',UTS:'UTS',UAS:'UAS'};
 const katLabel=p=>{const ke=+p.ke||1;return (KAT[p.kategori]||p.kategori||'')+(ke>1?' '+ke:'');};
 let ID={nama:'',nisn:'',kelas:'',kategori:''};
+let resumed=false,resumeRow=null,prevHasil=null;
 let P,A,Q=[],st,KEY,deadline,timer,busy=false,finished=false,warned=false,wmPrev=null,wmTo=null,timeUp=false;
 
 function save(){try{localStorage.setItem(KEY,JSON.stringify(st));}catch(_){}}
@@ -167,20 +168,32 @@ async function init(){
     }
     ID={nama:nama,nisn:String(nisn||''),kelas:kelas||P.kelas,kategori:katLabel(P)};
     if(norm(kelas)!==norm(P.kelas))return msg('Bukan untuk kelasmu','Asesmen ini diperuntukkan bagi kelas '+P.kelas+'.','Kembali',BACK);
-    const rh=await db.from('hasil_asesmen').select('nilai,skor_otomatis,skor_maks,perlu_koreksi').eq('soal_aktif_id',A.id).eq('siswa_id',String(sess.id)).maybeSingle();
-    if(rh.data)return done(rh.data,true);
-    if(now>new Date(A.selesai).getTime())return msg('Waktu habis','Asesmen ini sudah berakhir.','Kembali',BACK);
+    const rh=await db.from('hasil_asesmen').select('*').eq('soal_aktif_id',A.id).eq('siswa_id',String(sess.id)).maybeSingle();
+    if(rh.data){
+      resumeRow=await findResume();
+      if(!resumeRow)return done(rh.data,true);
+      resumed=true;prevHasil=rh.data;
+    }
+    if(now>new Date(A.selesai).getTime())return resumed?done(prevHasil,true):msg('Waktu habis','Asesmen ini sudah berakhir.','Kembali',BACK);
     const rb=await db.from('butir_soal').select('nomor,tipe,teks,gambar,skor,opsi,jawaban,arah').eq('paket_id',pid).order('nomor',{ascending:true}).range(0,999);
     if(rb.error)throw rb.error;Q=rb.data||[];
     if(!Q.length)return msg('Belum ada soal','Paket ini belum memiliki butir soal. Hubungi gurumu.','Kembali',BACK);
 
     KEY='madani_kerja_'+A.id+'_'+sess.id;
     try{st=JSON.parse(localStorage.getItem(KEY)||'null');}catch(_){}
-    gate(!st,()=>{
+    if(resumed){
+      if(!st){ /* lanjutan dari pengawas: pulihkan jawaban & waktu mulai asli dari jawaban yang sudah terkirim */
+        st={mulai:Date.parse(prevHasil.mulai)||Date.now(),ans:{},flag:{},cur:0,viol:0,ket:[]};
+        (Array.isArray(prevHasil.jawaban)?prevHasil.jawaban:[]).forEach(j=>{const i=Q.findIndex(q=>q.nomor===j.nomor);if(i>=0&&j.jawab!==null&&j.jawab!==undefined)st.ans[i]=j.jawab;});
+        save();
+      }
+      if(Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime())<=Date.now())return done(prevHasil,true); /* waktu ujian sudah berakhir */
+    }
+    gate(!st||resumed&&!st.lock,()=>{
       if(!st)st={mulai:Date.now(),ans:{},flag:{},cur:0,viol:0};
       deadline=Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime());
       const was=st.lock;st.lock=true;save();start();lockStart();
-      stopWatch();
+      adoptRow();stopWatch();
       chkStop().then(()=>{if(was&&!stopped)violate('Halaman ditutup atau dimuat ulang',true);});
     });
   }catch(e){
@@ -269,24 +282,39 @@ function violate(reason,quiet){
 const KET_MAP={'Kamu berpindah tab atau aplikasi':'Berpindah tab/aplikasi atau menggeser layar untuk menutup','Halaman ujian kehilangan fokus':'Halaman ujian kehilangan fokus (pindah jendela/aplikasi)','Kamu keluar dari layar penuh':'Keluar dari layar penuh','Kamu menekan tombol Kembali':'Menekan tombol Kembali','Mencoba mengambil screenshot':'Mencoba mengambil screenshot','Halaman ditutup atau dimuat ulang':'Halaman ditutup atau dimuat ulang'};
 const ketOf=r=>KET_MAP[r]||r;
 let ujP=Promise.resolve();
-/* mode 'open' = hanya jika jam_selesai masih kosong (tidak menimpa penghentian pengawas); mode 'mg' = hanya jika status masih Mengerjakan */
+/* mode 'open' = tidak menimpa keterangan penghentian pengawas; mode 'mg' = hanya jika status masih Mengerjakan */
 function ujSync(patch,mode){
   if(!ses||!ses.ujian_id)return;
   ujP=ujP.then(()=>{
     let q=db.from('ujian_berlangsung').update(patch).eq('id',ses.ujian_id);
-    if(mode==='open')q=q.is('jam_selesai',null);else if(mode==='mg')q=q.eq('status','Mengerjakan');
+    if(mode==='open')q=q.or('keterangan.is.null,keterangan.not.in.("'+STOP_KET.join('","')+'")');else if(mode==='mg')q=q.eq('status','Mengerjakan');
     return q;
   }).then(r=>{if(r&&r.error)console.warn('ujian_berlangsung:',r.error.message);}).catch(()=>{});
 }
+/* ---------- Pengawas mengizinkan lanjut: baris yang ditandai 'Dilanjutkan pengawas' dipakai lagi ---------- */
+async function findResume(){
+  try{
+    const r=await db.from('ujian_berlangsung').select('id').eq('nisn',ID.nisn).eq('jenis_ujian',ID.kategori).eq('status','Mengerjakan').like('keterangan','Dilanjutkan pengawas%').order('id',{ascending:false}).limit(1);
+    return r.error?null:(r.data&&r.data[0])||null;
+  }catch(_){return null;}
+}
+function adoptRow(){
+  if(!resumed||!resumeRow)return;
+  const nid=ses&&ses.ujian_id; /* baris baru yang dibuat asesmen.html saat siswa klik Mulai: dihapus, pakai baris lama */
+  if(nid&&String(nid)!==String(resumeRow.id)){try{db.from('ujian_berlangsung').delete().eq('id',nid).then(()=>{},()=>{});}catch(_){}}
+  ses.ujian_id=resumeRow.id;
+  try{sessionStorage.setItem('madani_asesmen',JSON.stringify(ses));}catch(_){}
+}
 /* ---------- Pengawas menghentikan ujian (slider di pantauujian.html): siswa keluar paksa & jawaban dikirim otomatis ----------
-   Penanda: status = Pelanggaran DAN jam_selesai terisi (pelanggaran otomatis siswa tidak pernah mengisi jam_selesai sebelum kirim). */
+   Penanda: status = Pelanggaran DAN keterangan persis salah satu pilihan pengawas (keterangan pelanggaran otomatis siswa selalu berformat "1. ..."). */
+const STOP_KET=['Mencontek','Melanggar Tata Tertib Ujian','Membuat Kegaduhan selama ujian'];
 let stopped=false,stopKet='',stopT=null,stopBound=false;
 async function chkStop(){
   if(stopped||finished||busy||!ses||!ses.ujian_id)return;
   try{
     const r=await db.from('ujian_berlangsung').select('status,keterangan,jam_selesai').eq('id',ses.ujian_id).maybeSingle();
     if(r.error||!r.data||stopped||finished||busy)return;
-    if(r.data.status==='Pelanggaran'&&r.data.jam_selesai){
+    if(r.data.status==='Pelanggaran'&&STOP_KET.indexOf(String(r.data.keterangan||'').trim())>=0){
       stopped=true;stopKet=r.data.keterangan||'';clearInterval(stopT);
       toast('Ujian dihentikan oleh pengawas. Jawaban dikirim otomatis.');
       submit();
@@ -725,9 +753,17 @@ async function submit(){
     mulai:new Date(st.mulai).toISOString(),dikirim:new Date().toISOString()};
   let saved=true,dup=false;
   const MP=paketMapel();
-  let r=await db.from('hasil_asesmen').insert(MP?Object.assign({},rec,{matapelajaran:MP}):rec);
-  /* kolom matapelajaran belum ada di hasil_asesmen: simpan tanpa kolom itu agar jawaban tidak hilang */
-  if(r.error&&MP&&/matapelajaran/i.test(r.error.message||''))r=await db.from('hasil_asesmen').insert(rec);
+  let r;
+  if(resumed){ /* ujian dilanjutkan: perbarui hasil yang sudah ada */
+    const upd=o=>db.from('hasil_asesmen').update(o).eq('soal_aktif_id',A.id).eq('siswa_id',String(sess.id)).select('soal_aktif_id');
+    r=await upd(MP?Object.assign({},rec,{matapelajaran:MP}):rec);
+    if(r.error&&MP&&/matapelajaran/i.test(r.error.message||''))r=await upd(rec);
+    if(!r.error&&(!r.data||!r.data.length))r={error:{message:'Pembaruan hasil ditolak (cek policy update tabel hasil_asesmen di Supabase).'}};
+  }else{
+    r=await db.from('hasil_asesmen').insert(MP?Object.assign({},rec,{matapelajaran:MP}):rec);
+    /* kolom matapelajaran belum ada di hasil_asesmen: simpan tanpa kolom itu agar jawaban tidak hilang */
+    if(r.error&&MP&&/matapelajaran/i.test(r.error.message||''))r=await db.from('hasil_asesmen').insert(rec);
+  }
   if(r.error){
     if(r.error.code==='23505'){dup=true;}
     else if(r.error.code==='42P01'||/does not exist|schema cache/i.test(r.error.message||'')){saved=false;}
@@ -737,7 +773,7 @@ async function submit(){
   if(!dup&&nilai!==null){try{nl=await simpanKeNilaiKelas(nilai);}catch(e){nl={ok:false,msg:(e&&e.message)||String(e)};}}
   finished=true;
   {const d=new Date(),jm=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
-   if(!stopped)ujSync((st.viol||0)>0?{jam_selesai:jm}:{status:'Selesai',jam_selesai:jm},(st.viol||0)>0?null:'mg');} /* ada pelanggaran: status tetap Pelanggaran */
+   if(!stopped){ujSync({status:'Selesai',jam_selesai:jm},'mg');ujSync({jam_selesai:jm});}} /* ada pelanggaran: status tetap Pelanggaran */
   await Promise.race([ujP,new Promise(r=>setTimeout(r,3000))]);
   if(saved){try{localStorage.removeItem(KEY);}catch(_){}try{sessionStorage.removeItem('madani_asesmen');}catch(_){}}
   done({nilai:nilai,skor_otomatis:skor,skor_maks:maks,perlu_koreksi:essay},false,saved,nl);
