@@ -78,6 +78,21 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
 .err{color:var(--red)}
 .upd{font-size:12px;color:var(--muted);margin-top:10px;text-align:right}
 
+/* Aksi: keterangan & slider hentikan */
+.ketsel{min-width:230px}
+.ketsel select{font:inherit;font-size:13px;color:var(--text);width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff}
+.ketsel select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,166,230,.2)}
+td.aksi{white-space:nowrap}
+.sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--red)}
+.sw input{position:absolute;opacity:0;width:0;height:0}
+.sw .trk{position:relative;flex:none;width:46px;height:26px;border-radius:99px;background:var(--track);transition:background .2s;box-shadow:inset 0 0 0 .5px var(--line)}
+.sw .trk::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.3);transition:transform .2s}
+.sw input:checked+.trk{background:var(--red)}
+.sw input:checked+.trk::after{transform:translateX(20px)}
+.sw input:focus-visible+.trk{outline:3px solid var(--accent);outline-offset:2px}
+.sw input:disabled+.trk{opacity:.5}
+.sw input:disabled~span{opacity:.6}
+
 /* Dock */
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;padding:0 14px calc(12px + env(safe-area-inset-bottom));pointer-events:none}
 .dock nav{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 16px;border-radius:34px;background:rgba(255,255,255,.55);backdrop-filter:saturate(180%) blur(30px);-webkit-backdrop-filter:saturate(180%) blur(30px);box-shadow:var(--shadow)}
@@ -106,7 +121,8 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
   td{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border:0;text-align:right}
   td::before{content:attr(data-l);flex:none;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding-top:2px}
   td.nm{font-size:15px}
-  td.ket{min-width:0}
+  td.ket,.ketsel{min-width:0}
+  .ketsel select{width:auto;max-width:62vw}
   td.ket::before{align-self:flex-start}
   .d .ic{width:50px;height:50px;border-radius:14px}
   .d .ic svg{width:25px;height:25px}
@@ -172,11 +188,14 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
   var natSort=function(a,b){return String(a).localeCompare(String(b),'id',{numeric:true});};
   var TABS=['Mengerjakan','Selesai','Pelanggaran'];
   var EMPTY={Mengerjakan:'Belum ada siswa yang sedang mengerjakan ujian.',Selesai:'Belum ada siswa yang selesai mengerjakan ujian.',Pelanggaran:'Tidak ada siswa yang melakukan pelanggaran.'};
+  var KET_OPSI=['Mencontek','Melanggar Tata Tertib Ujian','Membuat Kegaduhan selama ujian'];
+  var picks={};
   var rows=[],tab='Mengerjakan',timer=null,loading=false,loadErr='';
 
   function pad(n){return (n<10?'0':'')+n;}
   function todayStr(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
   function fmtTgl(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'/'+m[2]+'/'+m[1]:(s||'-');}
+  function nowJam(){var d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());}
   function fmtJam(s){return s?String(s).slice(0,8):'-';}
 
   /* ---------- Navbar: nama sekolah & logo dari tabel profil ---------- */
@@ -206,7 +225,8 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
       loadErr=/does not exist|schema cache|Could not find the table/i.test(m)?'Tabel ujian_berlangsung belum ada di Supabase. Jalankan ujian_berlangsung.sql di SQL Editor.':/permission denied/i.test(m)?'Akses data ditolak. Periksa RLS dan grant tabel ujian_berlangsung.':m;
       $('live').classList.add('off');$('liveTxt').textContent='Terputus';
     }finally{loading=false;b.classList.remove('spin');}
-    render();
+    var ae=document.activeElement;
+    if(!(ae&&ae.classList&&ae.classList.contains('selKet')))render();
   }
 
   /* ---------- Tampilan ---------- */
@@ -226,6 +246,14 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
       return true;
     });
   }
+  function ketCell(r){
+    var cur=picks[r.id]||'';
+    return '<td class="ketsel" data-l="Keterangan"><select class="selKet" data-id="'+esc(r.id)+'" aria-label="Keterangan pelanggaran '+esc(r.nama_siswa)+'"><option value="">Pilih keterangan…</option>'+
+      KET_OPSI.map(function(o){return '<option value="'+esc(o)+'"'+(o===cur?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select></td>';
+  }
+  function aksiCell(r){
+    return '<td class="aksi" data-l="Aksi"><label class="sw"><input type="checkbox" role="switch" class="swStop" data-id="'+esc(r.id)+'" aria-label="Hentikan ujian '+esc(r.nama_siswa)+'"><span class="trk" aria-hidden="true"></span><span>Hentikan Ujian</span></label></td>';
+  }
   function render(){
     buildKelas();
     var all=filtered(),cnt={Mengerjakan:0,Selesai:0,Pelanggaran:0};
@@ -236,10 +264,10 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
     el.setAttribute('aria-labelledby','tab-'+tab);
     if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
     if(!list.length){el.innerHTML='<div class="empty">'+(rows.length&&all.length===0?'Tidak ada data yang cocok dengan filter.':!rows.length&&$('fTgl').value?'Belum ada data pada tanggal '+fmtTgl($('fTgl').value)+'. Kosongkan filter tanggal untuk melihat semua tanggal.':EMPTY[tab])+'</div>';return;}
-    var ket=tab==='Pelanggaran';
-    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th>':'')+'</tr></thead><tbody>'+
+    var ket=tab==='Pelanggaran',mg=tab==='Mengerjakan';
+    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th>':'')+(mg?'<th>Keterangan</th><th>Aksi</th>':'')+'</tr></thead><tbody>'+
       list.map(function(r,i){
-        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="nm" data-l="Nama">'+esc(r.nama_siswa)+'</td><td data-l="NISN">'+esc(r.nisn)+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td><td data-l="Jenis Ujian">'+esc(r.jenis_ujian)+'</td><td data-l="Tanggal">'+fmtTgl(r.tanggal)+'</td><td class="num" data-l="Jam Mulai">'+fmtJam(r.jam_mulai)+'</td><td class="num" data-l="Jam Selesai">'+fmtJam(r.jam_selesai)+'</td><td data-l="Status"><span class="bdg '+esc(r.status)+'">'+esc(r.status)+'</span></td>'+(ket?'<td class="ket" data-l="Keterangan">'+(esc(r.keterangan)||'-')+'</td>':'')+'</tr>';
+        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="nm" data-l="Nama">'+esc(r.nama_siswa)+'</td><td data-l="NISN">'+esc(r.nisn)+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td><td data-l="Jenis Ujian">'+esc(r.jenis_ujian)+'</td><td data-l="Tanggal">'+fmtTgl(r.tanggal)+'</td><td class="num" data-l="Jam Mulai">'+fmtJam(r.jam_mulai)+'</td><td class="num" data-l="Jam Selesai">'+fmtJam(r.jam_selesai)+'</td><td data-l="Status"><span class="bdg '+esc(r.status)+'">'+esc(r.status)+'</span></td>'+(ket?'<td class="ket" data-l="Keterangan">'+(esc(r.keterangan)||'-')+'</td>':'')+(mg?ketCell(r)+aksiCell(r):'')+'</tr>';
       }).join('')+'</tbody></table></div>';
   }
 
@@ -259,6 +287,34 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
     else return;
     e.preventDefault();
   });
+
+  /* ---------- Aksi: hentikan ujian ---------- */
+  var panel=$('panelList');
+  panel.addEventListener('change',function(e){
+    var t=e.target;
+    if(t.classList.contains('selKet')){picks[t.dataset.id]=t.value;return;}
+    if(t.classList.contains('swStop')&&t.checked)stopExam(t);
+  });
+  async function stopExam(cb){
+    var id=cb.dataset.id,sel=panel.querySelector('select.selKet[data-id="'+id+'"]'),val=sel?sel.value:'';
+    var r=rows.filter(function(x){return String(x.id)===String(id);})[0]||{};
+    if(!val){cb.checked=false;alert('Pilih keterangan terlebih dahulu (Mencontek / Melanggar Tata Tertib Ujian / Membuat Kegaduhan selama ujian).');if(sel)sel.focus();return;}
+    if(!confirm('Hentikan ujian '+(r.nama_siswa||'siswa ini')+'?\nKeterangan: '+val)){cb.checked=false;return;}
+    cb.disabled=true;
+    try{
+      var res=await db.from('ujian_berlangsung')
+        .update({status:'Pelanggaran',keterangan:val,jam_selesai:nowJam()})
+        .eq('id',id).eq('status','Mengerjakan').select('id');
+      if(res.error)throw res.error;
+      if(!res.data||!res.data.length)alert('Status siswa ini sudah berubah (mungkin sudah selesai). Data diperbarui.');
+      delete picks[id];
+    }catch(err){
+      cb.checked=false;cb.disabled=false;
+      alert('Gagal menghentikan ujian: '+((err&&err.message)||err));
+      return;
+    }
+    load();
+  }
 
   /* ---------- Filter & auto-refresh ---------- */
   $('fKelas').addEventListener('change',render);
