@@ -71,6 +71,9 @@ td.ac{white-space:nowrap}
 .fld{display:block;margin-bottom:12px}
 .fld span{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:5px}
 .fld input{width:100%;font:inherit;color:var(--text);padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:#fff}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld input[type=time]{min-height:44px}
+td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
 .fld input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,166,230,.2)}
 .fmsg{min-height:20px;font-size:13px;color:var(--red);margin-bottom:6px}
 .macts{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
@@ -202,6 +205,10 @@ td.ac{white-space:nowrap}
     <p class="sub">Isi jadwal ujian dan pengawas ruangnya.</p>
     <div>
       <label class="fld"><span>Hari / Tanggal</span><input id="fTgl" type="date" required></label>
+      <div class="frow">
+        <label class="fld"><span>Waktu Mulai</span><input id="fMulai" type="time" required></label>
+        <label class="fld"><span>Waktu Selesai</span><input id="fSelesai" type="time" required></label>
+      </div>
       <div class="fld"><span>Mata Pelajaran</span><div id="ddMapel"></div><input id="fMapel" type="hidden"></div>
       <div class="fld"><span>Nama Pengawas</span><div id="ddNama"></div><input id="fNama" type="hidden"></div>
       <label class="fld"><span>NIP</span><input id="fNip" type="text" inputmode="numeric" maxlength="30" autocomplete="off" placeholder="Terisi otomatis dari pengawas"></label>
@@ -242,9 +249,11 @@ td.ac{white-space:nowrap}
     if(!m)return s||'-';
     return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
   }
+  function fmtJam(s){var m=String(s||'').match(/^(\d{2}):(\d{2})/);return m?m[1]+':'+m[2]:'';}
   function errText(e){
     var m=(e&&e.message)||String(e);
     if(/does not exist|schema cache|Could not find the table/i.test(m))return 'Tabel jadwal_ujian belum ada di Supabase. Jalankan jadwal_ujian.sql di SQL Editor.';
+    if(/jam_mulai|jam_selesai/i.test(m))return 'Kolom jam_mulai / jam_selesai belum ada di tabel jadwal_ujian. Jalankan jadwal_ujian.sql di SQL Editor.';
     if(/permission denied/i.test(m))return 'Akses data ditolak. Periksa RLS dan grant tabel jadwal_ujian.';
     return m;
   }
@@ -442,7 +451,7 @@ td.ac{white-space:nowrap}
     var q=$('fQ').value.trim().toLowerCase();
     if(!q)return rows;
     return rows.filter(function(r){
-      return [r.mata_pelajaran,r.nama_pengawas,r.nip,r.kelas,fmtTgl(r.tanggal)].join(' ').toLowerCase().indexOf(q)>=0;
+      return [r.mata_pelajaran,r.nama_pengawas,r.nip,r.kelas,fmtTgl(r.tanggal),fmtJam(r.jam_mulai),fmtJam(r.jam_selesai)].join(' ').toLowerCase().indexOf(q)>=0;
     });
   }
   function render(){
@@ -450,9 +459,9 @@ td.ac{white-space:nowrap}
     $('chipTotal').textContent=rows.length+' jadwal';
     if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
     if(!list.length){el.innerHTML='<div class="empty">'+(rows.length?'Tidak ada jadwal yang cocok dengan pencarian.':'Belum ada jadwal ujian. Tekan tombol + Ujian untuk menambahkan.')+'</div>';return;}
-    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Hari / Tanggal</th><th>Mata Pelajaran</th><th>Nama Pengawas</th><th>NIP</th><th>Kelas</th><th class="ac">Aksi</th></tr></thead><tbody>'+
+    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Hari / Tanggal</th><th>Waktu Mulai</th><th>Waktu Selesai</th><th>Mata Pelajaran</th><th>Nama Pengawas</th><th>NIP</th><th>Kelas</th><th class="ac">Aksi</th></tr></thead><tbody>'+
       list.map(function(r,i){
-        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="tg" data-l="Hari / Tanggal">'+esc(fmtTgl(r.tanggal))+'</td><td class="nm" data-l="Mata Pelajaran">'+esc(r.mata_pelajaran)+'</td><td data-l="Pengawas">'+esc(r.nama_pengawas)+'</td><td data-l="NIP">'+(esc(r.nip)||'-')+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td>'+
+        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="tg" data-l="Hari / Tanggal">'+esc(fmtTgl(r.tanggal))+'</td><td class="jam" data-l="Waktu Mulai">'+(fmtJam(r.jam_mulai)||'-')+'</td><td class="jam" data-l="Waktu Selesai">'+(fmtJam(r.jam_selesai)||'-')+'</td><td class="nm" data-l="Mata Pelajaran">'+esc(r.mata_pelajaran)+'</td><td data-l="Pengawas">'+esc(r.nama_pengawas)+'</td><td data-l="NIP">'+(esc(r.nip)||'-')+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td>'+
           '<td class="ac"><button class="mini" type="button" data-a="edit" data-id="'+esc(r.id)+'">Ubah</button><button class="mini del" type="button" data-a="del" data-id="'+esc(r.id)+'">Hapus</button></td></tr>';
       }).join('')+'</tbody></table></div>';
   }
@@ -468,6 +477,8 @@ td.ac{white-space:nowrap}
     editId=r?r.id:null;lastFocus=document.activeElement;
     $('mTitle').textContent=r?'Ubah Ujian':'Tambah Ujian';
     $('fTgl').value=r?String(r.tanggal).slice(0,10):'';
+    $('fMulai').value=r?fmtJam(r.jam_mulai):'';
+    $('fSelesai').value=r?fmtJam(r.jam_selesai):'';
     ddMapel.setValue(r?r.mata_pelajaran:'');
     ddNama.setValue(r?r.nama_pengawas:'');
     $('fNip').value=r?r.nip||'':'';
@@ -483,8 +494,9 @@ td.ac{white-space:nowrap}
   }
   async function save(){
     if(saving)return;
-    var p={tanggal:$('fTgl').value,mata_pelajaran:$('fMapel').value.trim(),nama_pengawas:$('fNama').value.trim(),nip:$('fNip').value.trim(),kelas:$('fKelas').value.trim()};
-    if(!p.tanggal||!p.mata_pelajaran||!p.nama_pengawas||!p.kelas){$('fMsg').textContent='Lengkapi tanggal, mata pelajaran, pengawas, dan kelas terlebih dulu.';return;}
+    var p={tanggal:$('fTgl').value,jam_mulai:$('fMulai').value,jam_selesai:$('fSelesai').value,mata_pelajaran:$('fMapel').value.trim(),nama_pengawas:$('fNama').value.trim(),nip:$('fNip').value.trim(),kelas:$('fKelas').value.trim()};
+    if(!p.tanggal||!p.jam_mulai||!p.jam_selesai||!p.mata_pelajaran||!p.nama_pengawas||!p.kelas){$('fMsg').textContent='Lengkapi tanggal, waktu mulai, waktu selesai, mata pelajaran, pengawas, dan kelas terlebih dulu.';return;}
+    if(p.jam_selesai<=p.jam_mulai){$('fMsg').textContent='Waktu selesai harus lebih akhir dari waktu mulai.';return;}
     saving=true;$('mSimpan').disabled=true;$('mSimpan').textContent='Menyimpan…';
     try{
       var r=editId?await db.from(TBL).update(p).eq('id',editId).select('id'):await db.from(TBL).insert(p).select('id');
@@ -600,14 +612,14 @@ td.ac{white-space:nowrap}
         startY:y+meta.length*14+8,
         margin:{left:M,right:M,bottom:44},
         tableWidth:pw-2*M,
-        head:[['No','Hari / Tanggal','Mata Pelajaran','Nama Pengawas','NIP','Kelas']],
-        body:rows.map(function(r,i){return [String(i+1),fmtTgl(r.tanggal),r.mata_pelajaran||'-',r.nama_pengawas||'-',r.nip||'-',r.kelas||'-'];}),
+        head:[['No','Hari / Tanggal','Waktu Mulai','Waktu Selesai','Mata Pelajaran','Nama Pengawas','NIP','Kelas']],
+        body:rows.map(function(r,i){return [String(i+1),fmtTgl(r.tanggal),fmtJam(r.jam_mulai)||'-',fmtJam(r.jam_selesai)||'-',r.mata_pelajaran||'-',r.nama_pengawas||'-',r.nip||'-',r.kelas||'-'];}),
         theme:'grid',
         styles:{font:'helvetica',fontSize:8.6,cellPadding:{top:4,bottom:4,left:5,right:5},lineColor:[214,226,219],lineWidth:.5,textColor:[30,45,36],overflow:'linebreak',valign:'middle'},
         headStyles:{fillColor:[11,122,71],textColor:255,fontStyle:'bold',halign:'left'},
         alternateRowStyles:{fillColor:[243,250,246]},
-        columnStyles:{0:{cellWidth:28,halign:'center'},1:{cellWidth:150},2:{cellWidth:'auto'},3:{cellWidth:170},4:{cellWidth:110},5:{cellWidth:80}},
-        didParseCell:function(d){if(d.section==='head'&&d.column.index===0)d.cell.styles.halign='center';}
+        columnStyles:{0:{cellWidth:28,halign:'center'},1:{cellWidth:130},2:{cellWidth:52,halign:'center'},3:{cellWidth:52,halign:'center'},4:{cellWidth:'auto'},5:{cellWidth:150},6:{cellWidth:95},7:{cellWidth:60}},
+        didParseCell:function(d){if(d.section==='head'&&(d.column.index===0||d.column.index===2||d.column.index===3))d.cell.styles.halign='center';}
       });
 
       /* footer tiap halaman */
