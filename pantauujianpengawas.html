@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pantau Ujian Pengawas — Scoria</title>
+<style>
+:root{
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --text:#0f2233;--muted:#4d6a80;--accent:#3d9be0;--green:#1f9d3a;--red:#d92d20;
+  --glass:rgba(255,255,255,.72);--card:rgba(255,255,255,.9);--line:rgba(0,0,0,.1);--bar:rgba(255,255,255,.6);--track:rgba(120,120,128,.16);
+  --wall:linear-gradient(135deg,#97D7FF 0%,#c3e6ff 38%,#e3f3ff 70%,#fdf1d0 100%);
+  --shadow:0 14px 40px rgba(30,30,80,.2),0 0 0 .5px rgba(0,0,0,.14);
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);color:var(--text);background:var(--wall) fixed;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:10px}
+
+/* Navbar */
+.nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:8px 20px;padding-top:calc(8px + env(safe-area-inset-top));
+  background:var(--bar);backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px);border-bottom:.5px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.01em;min-width:0}
+.logo{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;overflow:hidden;background:linear-gradient(160deg,#b9e5ff,#6fc2f6);color:#0b2a42;font-weight:800;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 2px 6px rgba(0,0,0,.22)}
+.logo img{width:100%;height:100%;object-fit:contain;background:#08141d}
+.sname{display:block;min-width:0;line-height:1.2}
+.sname b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sname small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
+
+/* Layout */
+.wrap{max-width:1200px;margin:0 auto;padding:22px 20px}
+.head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:10px;margin-bottom:16px}
+h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
+.head p{color:var(--muted);font-size:14px;margin-top:4px}
+.chip{font-size:13px;font-weight:600;padding:6px 14px;border-radius:99px;background:var(--glass);box-shadow:0 0 0 .5px var(--line);white-space:nowrap}
+.panel{background:var(--glass);backdrop-filter:saturate(180%) blur(30px);-webkit-backdrop-filter:saturate(180%) blur(30px);border-radius:16px;box-shadow:var(--shadow)}
+.box{padding:18px}
+
+/* Filter hari */
+.days{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 12px;margin-bottom:2px;scrollbar-width:none}
+.days::-webkit-scrollbar{display:none}
+.dy{flex:none;display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:99px;font-size:13.5px;font-weight:650;background:var(--card);box-shadow:0 0 0 .5px var(--line);transition:background .15s,color .15s}
+.dy:hover{background:#fff}
+.dy .n{font-size:11.5px;font-weight:700;min-width:20px;padding:1px 6px;border-radius:99px;background:var(--track);color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.dy.today::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.dy[aria-pressed="true"]{background:linear-gradient(160deg,#38bdf8,#0369a1);color:#fff;box-shadow:0 3px 10px rgba(3,105,161,.35)}
+.dy[aria-pressed="true"] .n{background:rgba(255,255,255,.25);color:#fff}
+.dy[aria-pressed="true"].today::after{background:#fff}
+
+/* Kartu ujian */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.cd{position:relative;display:flex;flex-direction:column;gap:8px;padding:12px 12px 12px 14px;border-radius:14px;background:var(--card);box-shadow:0 0 0 .5px var(--line),0 4px 14px rgba(30,30,80,.08);overflow:hidden;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,filter .2s,opacity .2s}
+.cd::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.3) 50%,transparent 65%);transform:translateX(-130%)}
+.cd.chk{cursor:progress;pointer-events:none}
+.cd::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,var(--c1),var(--c2))}
+.cd-top{display:flex;align-items:center;gap:10px;min-width:0}
+.cd-av{transition:transform .3s cubic-bezier(.3,1.6,.5,1);flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:800;letter-spacing:.02em;color:#fff;background:linear-gradient(160deg,var(--c1),var(--c2));box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 2px 6px rgba(0,0,0,.2)}
+.cd-nm{flex:1;min-width:0;line-height:1.25}
+.cd-nm b{display:block;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cd-nm small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cd-jd{font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+.cd-ft{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:.5px solid var(--line);font-size:12px}
+.cd-tg{display:flex;align-items:center;gap:6px;min-width:0;color:var(--text);font-weight:600}
+.cd-tg svg{flex:none;width:14px;height:14px;color:var(--muted)}
+.cd-tg span{min-width:0}
+.cd-tg small{display:block;font-size:11.5px;font-weight:500;color:var(--muted)}
+.cd-jm{display:flex;flex-wrap:wrap;gap:6px}
+.cd-jm span{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--track);color:var(--muted);white-space:nowrap}
+.cd-jm span b{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.cd.live .cd-jm span,.cd.soon .cd-jm span{background:rgba(255,255,255,.22);color:rgba(255,255,255,.9)}
+.cd.live .cd-jm span b,.cd.soon .cd-jm span b{color:#fff}
+.jm{grid-column:2;display:flex;flex-wrap:wrap;gap:6px}
+.jm span{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:600;color:var(--muted);background:var(--track);white-space:nowrap}
+.jm span b{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.jm .no{font-weight:500;font-style:italic}
+.cd-st{flex:none;font-style:normal;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
+.cd.live .cd-st::before{content:"";display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:50%;background:#fff;vertical-align:1px;animation:pl 1.6s ease-in-out infinite}
+
+/* Ujian aktif: latar kartu berwarna sesuai mata pelajaran */
+.cd.live,.cd.soon{color:#fff;background:var(--c2);background:linear-gradient(150deg,color-mix(in srgb,var(--c1) 22%,var(--c2)) 0%,var(--c2) 100%);box-shadow:0 6px 18px rgba(30,30,80,.22),inset 0 1px 0 rgba(255,255,255,.25)}
+.cd.live::before,.cd.soon::before{display:none}
+.cd.live .cd-av,.cd.soon .cd-av{background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}
+.cd.live .cd-nm small,.cd.soon .cd-nm small,.cd.live .cd-tg svg,.cd.soon .cd-tg svg,.cd.live .cd-tg small,.cd.soon .cd-tg small{color:rgba(255,255,255,.85)}
+.cd.live .cd-tg,.cd.soon .cd-tg{color:#fff}
+.cd.live .cd-ft,.cd.soon .cd-ft{border-top-color:rgba(255,255,255,.3)}
+.cd.live .cd-st,.cd.soon .cd-st{background:rgba(255,255,255,.22);color:#fff}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.cd.live .cd-st::before{animation:none}}
+
+/* Hover & klik */
+@media (hover:hover){
+  .cd:hover{box-shadow:0 16px 30px rgba(30,30,80,.24),0 0 0 .5px var(--line)}
+  .cd.live:hover,.cd.soon:hover{box-shadow:0 18px 34px rgba(30,30,80,.3);box-shadow:0 18px 34px color-mix(in srgb,var(--c2) 55%,transparent),inset 0 1px 0 rgba(255,255,255,.3)}
+  .cd.off:hover,.cd.done:hover{opacity:1}
+}
+@media (hover:hover) and (prefers-reduced-motion:no-preference){
+  .cd:hover{transform:translateY(-5px) scale(1.025)}
+  .cd:hover::after{transform:translateX(130%);transition:transform .75s ease}
+  .cd:hover .cd-av{transform:rotate(-7deg) scale(1.14)}
+}
+@media (prefers-reduced-motion:no-preference){.cd:active{transform:scale(.97)}}
+
+/* Belum aktif / selesai: hitam putih */
+.cd.off,.cd.done{filter:grayscale(1);opacity:.82}
+.cd.off .cd-st,.cd.done .cd-st{background:rgba(0,0,0,.08);color:#444}
+
+.empty{padding:40px 14px;text-align:center;color:var(--muted);font-size:14px}
+.empty.err{color:var(--red)}
+.empty button{display:block;margin:10px auto 0;padding:8px 16px;border-radius:12px;font-weight:700;background:var(--track);color:var(--text)}
+.upd{font-size:12px;color:var(--muted);margin-top:12px;text-align:right}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:2px 2px 14px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.legend .a{background:linear-gradient(160deg,#38bdf8,#0369a1)}
+.legend .b{background:#9a9a9a}
+
+.mbd{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(10,25,40,.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.mbd[hidden]{display:none}
+.mdl{position:relative;width:100%;max-width:380px;max-height:92vh;overflow:auto;padding:30px 22px 20px;border-radius:24px;text-align:center;background:rgba(255,255,255,.97);box-shadow:0 24px 60px rgba(10,25,60,.35),0 0 0 .5px rgba(0,0,0,.12)}
+.mdl-ic{position:relative;width:76px;height:76px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;color:#fff;box-shadow:0 10px 24px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.45)}
+.mdl-ic svg{width:36px;height:36px}
+.mdl-ic::before{content:"";position:absolute;inset:-8px;border-radius:50%;border:2px solid currentColor;opacity:.0}
+.v-hari{background:linear-gradient(160deg,#fbbf24,#c2410c);--rg:#f59e0b}
+.v-kelas{background:linear-gradient(160deg,#fb7185,#be123c);--rg:#f43f5e}
+.v-login{background:linear-gradient(160deg,#38bdf8,#0369a1);--rg:#0ea5e9}
+.v-err{background:linear-gradient(160deg,#9ca3af,#4b5563);--rg:#6b7280}
+.mdl-ic::after{content:"";position:absolute;inset:-6px;border-radius:50%;box-shadow:0 0 0 3px var(--rg);opacity:.28}
+.mdl h2{font-size:21px;letter-spacing:-.015em;line-height:1.2;margin-bottom:8px}
+.mdl p.m{font-size:15px;line-height:1.5;color:#22394d;text-wrap:balance}
+.mdl p.dt{margin-top:8px;font-size:12.5px;color:var(--muted)}
+.mdl .jd{margin-top:16px;padding:12px;border-radius:14px;background:rgba(61,155,224,.08);box-shadow:inset 0 0 0 .5px var(--line);text-align:left}
+.mdl .jd h4{font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
+.mdl .jd ul{list-style:none;display:flex;flex-direction:column;gap:6px}
+.mdl .jd li{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;min-width:0}
+.mdl .jd li b{flex:none;padding:2px 9px;border-radius:99px;font-size:12px;color:#fff;background:linear-gradient(160deg,#38bdf8,#0369a1)}
+.mdl .jd li span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mdl .acts{display:flex;gap:10px;justify-content:center;margin-top:20px}
+.bt{flex:1;max-width:200px;padding:12px 18px;border-radius:13px;font-weight:700;background:var(--track)}
+.bt.pri{background:linear-gradient(160deg,#38bdf8,#0369a1);color:#fff;box-shadow:0 4px 12px rgba(3,105,161,.35)}
+@media (prefers-reduced-motion:no-preference){
+  .mbd:not([hidden]){animation:mf .18s ease-out}
+  .mbd:not([hidden]) .mdl{animation:mp .32s cubic-bezier(.2,1.1,.3,1)}
+  .mbd:not([hidden]) .mdl-ic{animation:mi .5s .08s cubic-bezier(.3,1.6,.5,1) both}
+  .mbd:not([hidden]) .mdl-ic::before{animation:rg 1.8s .4s ease-out 2}
+}
+@keyframes mf{from{opacity:0}to{opacity:1}}
+@keyframes mp{from{opacity:0;transform:translateY(14px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes mi{from{transform:scale(.4) rotate(-20deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes rg{0%{opacity:.55;transform:scale(.9)}100%{opacity:0;transform:scale(1.45)}}
+
+/* Dock */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;justify-content:center;padding:0 14px calc(12px + env(safe-area-inset-bottom));pointer-events:none}
+.dock nav{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:14px;padding:10px 16px;border-radius:34px;background:rgba(255,255,255,.55);backdrop-filter:saturate(180%) blur(30px);-webkit-backdrop-filter:saturate(180%) blur(30px);box-shadow:var(--shadow)}
+.d{display:grid;place-items:center;border-radius:15px;transition:transform .2s;position:relative}
+.d:hover{transform:translateY(-6px) scale(1.1)}
+.d:active{transform:scale(.94)}
+.d .ic{width:56px;height:56px;border-radius:15px;display:grid;place-items:center;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.4)}
+.d .ic svg{width:28px;height:28px}
+.d[data-tip]::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 12px);transform:translate(-50%,4px);padding:6px 11px;border-radius:8px;background:#000;color:#fff;font-size:12px;font-weight:600;white-space:nowrap;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s}
+@media (hover:hover){.d[data-tip]:hover::after{opacity:1;visibility:visible;transform:translate(-50%,0)}}
+.d:focus-visible::after{opacity:1;visibility:visible;transform:translate(-50%,0)}
+.d.spin .ic svg{animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+@media (max-width:620px){
+  .nav{padding:8px 8px;padding-top:calc(8px + env(safe-area-inset-top))}
+  .wrap{padding:14px 8px}
+  .box{padding:10px}
+  .sname small{display:none}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .cd{padding:10px 9px 10px 12px;gap:6px}
+  .cd-av{width:30px;height:30px;border-radius:9px;font-size:11px}
+  .cd-nm b{font-size:13px}
+  .cd-jd{font-size:12.5px}
+  .cd-ft{flex-direction:column;align-items:flex-start;gap:6px}
+  .d .ic{width:50px;height:50px;border-radius:14px}
+  .d .ic svg{width:25px;height:25px}
+  .dock nav{gap:10px;padding:9px 12px}
+}
+@media (max-width:360px){.grid{grid-template-columns:1fr}}
+
+/* Modal jadwal ujian & pengawas */
+.mdl.wide{max-width:680px;padding:22px 18px 18px;text-align:left}
+.jh{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.jh .jic{flex:none;width:44px;height:44px;border-radius:13px;display:grid;place-items:center;color:#fff;background:linear-gradient(160deg,#a78bfa,#6d28d9);box-shadow:0 3px 8px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.4)}
+.jh .jic svg{width:24px;height:24px}
+.jh h2{margin:0;text-align:left}
+.jh small{display:block;font-size:12.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.jtool{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:14px 0 10px}
+.jtool label.tg{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;padding:7px 12px;border-radius:99px;background:var(--track)}
+.jtool input[type=checkbox]{accent-color:#0369a1;width:16px;height:16px}
+.jtool .jn{margin-left:auto;font-size:12.5px;color:var(--muted)}
+.jbody{max-height:min(56vh,460px);overflow:auto;padding-right:2px}
+.jday{margin-bottom:12px}
+.jday h4{position:sticky;top:0;z-index:1;font-size:12.5px;font-weight:700;color:var(--muted);padding:6px 10px;border-radius:10px;background:rgba(236,243,250,.96);margin-bottom:6px}
+.jday h4 em{font-style:normal;color:var(--accent);margin-left:6px}
+.jrow{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center;padding:9px 10px;border-radius:12px;background:var(--card);box-shadow:0 0 0 .5px var(--line);margin-bottom:6px;font-size:13.5px}
+.jrow .kl{grid-row:1/4;align-self:start;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;color:#fff;background:linear-gradient(160deg,#38bdf8,#0369a1);white-space:nowrap}
+.jrow .mp{font-weight:700;min-width:0}
+.jrow .mp small{font-weight:500;color:var(--muted);margin-left:6px;white-space:nowrap}
+.jrow .pg{font-size:12.5px;color:var(--muted);min-width:0}
+.jrow .pg b{color:var(--text);font-weight:650}
+.jrow.me{background:rgba(31,157,58,.09);box-shadow:0 0 0 1px rgba(31,157,58,.4)}
+.jrow.me .pg b::after{content:"Anda";margin-left:8px;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:800;color:#fff;background:var(--green)}
+@media (max-width:520px){.mdl.wide{padding:18px 12px 14px}.jtool .jn{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="brand">
+    <span class="logo" id="logo" aria-hidden="true">S</span>
+    <span class="sname"><b id="navTitle">Scoria</b><small>Pantau Ujian Pengawas</small></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="head">
+    <div>
+      <h1>Pantau Ujian</h1>
+      <p>Daftar ujian semua mata pelajaran. Pilih hari untuk melihat jadwalnya, lalu klik kartu untuk mulai mengawas.</p>
+    </div>
+    <span class="chip" id="chipTotal">0 ujian</span>
+  </div>
+
+  <section class="panel box" aria-label="Daftar ujian">
+    <div class="days" id="days" role="group" aria-label="Filter hari"></div>
+    <div class="legend"><span><i class="a"></i>Berwarna: ujian aktif</span><span><i class="b"></i>Hitam putih: belum aktif atau sudah selesai</span></div>
+    <div id="list" aria-live="polite"><div class="empty">Memuat…</div></div>
+    <p class="upd" id="upd"></p>
+  </section>
+</main>
+
+<div class="mbd" id="mbd" hidden>
+  <div class="mdl" role="alertdialog" aria-modal="true" aria-labelledby="mdT" aria-describedby="mdM">
+    <div class="mdl-ic v-hari" id="mdIc" aria-hidden="true"></div>
+    <h2 id="mdT">Pemberitahuan</h2>
+    <p class="m" id="mdM"></p>
+    <p class="dt" id="mdD"></p>
+    <div id="mdJ"></div>
+    <div class="acts"><button type="button" class="bt pri" id="mdOk">Mengerti</button></div>
+  </div>
+</div>
+
+<div class="mbd" id="jbd" hidden>
+  <div class="mdl wide" role="dialog" aria-modal="true" aria-labelledby="jT">
+    <div class="jh">
+      <span class="jic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h3M8 17h6"/></svg></span>
+      <div><h2 id="jT">Jadwal Ujian &amp; Pengawas</h2><small>Sesuai data di halaman Pengaturan Ujian</small></div>
+    </div>
+    <div class="jtool">
+      <label class="tg"><input type="checkbox" id="jMine"> Hanya jadwal saya</label>
+      <label class="tg"><input type="checkbox" id="jPast"> Tampilkan yang sudah lewat</label>
+      <span class="jn" id="jCnt"></span>
+    </div>
+    <div class="jbody" id="jBody" aria-live="polite"><div class="empty">Memuat…</div></div>
+    <div class="acts"><button type="button" class="bt pri" id="jOk">Tutup</button></div>
+  </div>
+</div>
+
+<div class="dock">
+  <nav aria-label="Menu">
+    <a class="d" data-tip="Beranda" aria-label="Beranda" href="adminguru.html"><span class="ic" style="background:linear-gradient(160deg,#b9e5ff,#6fc2f6);color:#0b2a42"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7M6 10v10h12V10M10 20v-6h4v6"/></svg></span></a>
+    <button class="d" id="bRefresh" type="button" data-tip="Segarkan" aria-label="Segarkan data"><span class="ic" style="background:linear-gradient(160deg,#34d399,#047857)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 00-14.5-4.2L4 9M4 4v5h5M4 13a8 8 0 0014.5 4.2L20 15M20 20v-5h-5"/></svg></span></button>
+    <button class="d" id="bJadwal" type="button" data-tip="Jadwal Ujian" aria-label="Jadwal Ujian" aria-haspopup="dialog"><span class="ic" style="background:linear-gradient(160deg,#a78bfa,#6d28d9)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M8 14h3M8 17h6"/></svg></span></button>
+  </nav>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function(){
+  /* Sumber data sama dengan soal.html: paket_soal (judul, mata pelajaran, kelas) dan soal_aktif (status aktif & jadwal) */
+  var SB_URL='https://vvlngdwghdhrrnpczier.supabase.co';
+  var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bG5nZHdnaGRocnJucGN6aWVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDI1MzgsImV4cCI6MjEwNzk3ODUzOH0.kV3y6rUu0NKbV451dvD4SkeZRJtuLNzwoA81tUY8jiA';
+  var db=null;try{db=window.supabase.createClient(SB_URL,SB_KEY);}catch(_){}
+  var $=function(i){return document.getElementById(i);};
+  var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+
+  var DAYS=[{k:'all',t:'Semua'},{k:1,t:'Senin'},{k:2,t:'Selasa'},{k:3,t:'Rabu'},{k:4,t:'Kamis'},{k:5,t:'Jumat'}];
+  var PAL=['#38bdf8,#0369a1','#4ade80,#15803d','#fbbf24,#b45309','#a78bfa,#6d28d9','#fb7185,#be123c','#2dd4bf,#0f766e','#fb923c,#c2410c','#60a5fa,#1d4ed8'];
+  var TITLES={dr:1,drs:1,dra:1,hj:1,h:1,ir:1,prof:1};
+  var jdw=[];
+  var cards=[],loadErr='',loading=true,sel='all',today=new Date().getDay();
+
+  function hash(t){var h=0;for(var i=0;i<t.length;i++)h=(h*31+t.charCodeAt(i))>>>0;return h;}
+  function initials(t){
+    var w=String(t).replace(/[.,]/g,' ').split(/\s+/).filter(function(x){return x&&!TITLES[x.toLowerCase()];});
+    if(!w.length)return '?';
+    return (w.length>1?w[0].charAt(0)+w[1].charAt(0):w[0].slice(0,2)).toUpperCase();
+  }
+  function pad(n){return (n<10?'0':'')+n;}
+  function fmtTgl(d){return d.toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}
+  function fmtJam(d){return pad(d.getHours())+':'+pad(d.getMinutes());}
+
+  /* Status: live (berlangsung), soon (terjadwal), done (waktu habis), off (belum aktif) */
+  function stateOf(c){
+    var a=c.akt;
+    if(!a||!a.aktif)return 'off';
+    var now=Date.now();
+    if(c.end&&now>c.end)return 'done';
+    if(c.start&&now<c.start)return 'soon';
+    return 'live';
+  }
+  var LBL={live:'Berlangsung',soon:'Terjadwal',done:'Selesai',off:'Belum aktif'};
+
+  /* ---------- Navbar ---------- */
+  async function loadProfil(){
+    try{
+      var r=await db.from('profil').select('nama_sekolah,logo_url').order('id',{ascending:true}).limit(1).maybeSingle();
+      if(r.error||!r.data)return;
+      if(r.data.nama_sekolah)$('navTitle').textContent=r.data.nama_sekolah;
+      if(r.data.logo_url){var im=new Image();im.alt='';im.onload=function(){$('logo').textContent='';$('logo').appendChild(im);};im.src=r.data.logo_url;}
+    }catch(_){}
+  }
+
+  /* ---------- Data ---------- */
+  async function fetchAll(table,cols,order){
+    var out=[],from=0,step=1000;
+    for(;;){
+      var q=db.from(table).select(cols);
+      order.forEach(function(o){q=q.order(o[0],{ascending:o[1]});});
+      var r=await q.range(from,from+step-1);
+      if(r.error)throw r.error;
+      out=out.concat(r.data||[]);
+      if(!r.data||r.data.length<step)break;
+      from+=step;
+    }
+    return out;
+  }
+  function errText(e){
+    var m=(e&&e.message)||String(e);
+    if((e&&e.code==='42P01')||/does not exist|schema cache/i.test(m))return 'Tabel paket_soal atau soal_aktif belum ada di Supabase. Jalankan soal.sql dan soal_aktif.sql.';
+    if(/permission denied/i.test(m))return 'Akses data ditolak. Periksa RLS tabel paket_soal dan soal_aktif.';
+    return m;
+  }
+  async function load(){
+    loading=true;$('bRefresh').classList.add('spin');
+    try{
+      if(!db)throw new Error('Supabase tidak tersedia');
+      var res=await Promise.all([
+        fetchAll('paket_soal','id,judul,kelas,matapelajaran',[['id',false]]),
+        fetchAll('soal_aktif','id,paket_id,aktif,mulai,selesai',[['id',false]])
+      ]);
+      var akt={};
+      res[1].forEach(function(r){if(!akt[r.paket_id])akt[r.paket_id]=r;});   /* baris terbaru per paket, sama seperti soal.html */
+      cards=res[0].map(function(p){
+        var a=akt[p.id]||null;
+        return {id:p.id,judul:p.judul||'(Tanpa judul)',kelas:p.kelas||'',mapel:p.matapelajaran||'Tanpa mata pelajaran',akt:a,
+          start:a&&a.mulai?+new Date(a.mulai):null,end:a&&a.selesai?+new Date(a.selesai):null};
+      });
+      try{jdw=await fetchAll('jadwal_ujian','*',[['tanggal',true]]);}catch(_){}   /* cadangan jam bila belum ada jadwal di soal_aktif */
+      loadErr='';
+      $('upd').textContent='Diperbarui '+new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+    }catch(e){loadErr=errText(e);}
+    loading=false;$('bRefresh').classList.remove('spin');
+    render();
+  }
+
+  /* ---------- Tampilan ---------- */
+  function dayOf(c){return c.start?new Date(c.start).getDay():null;}
+  function sorted(list){
+    return list.slice().sort(function(a,b){
+      var ga=/^(live|soon)$/.test(stateOf(a))?0:1,gb=/^(live|soon)$/.test(stateOf(b))?0:1;
+      if(ga!==gb)return ga-gb;
+      if(a.start&&b.start&&a.start!==b.start)return a.start-b.start;
+      if(!!a.start!==!!b.start)return a.start?-1:1;
+      return a.mapel.localeCompare(b.mapel,'id',{numeric:true})||a.judul.localeCompare(b.judul,'id',{numeric:true});
+    });
+  }
+  function renderDays(){
+    $('days').innerHTML=DAYS.map(function(d){
+      var n=d.k==='all'?cards.length:cards.filter(function(c){return dayOf(c)===d.k;}).length;
+      return '<button type="button" class="dy'+(d.k===today?' today':'')+'" data-k="'+d.k+'" aria-pressed="'+(String(d.k)===String(sel))+'"'+(d.k===today?' title="Hari ini"':'')+'>'+d.t+'<em class="n" style="font-style:normal">'+n+'</em></button>';
+    }).join('');
+  }
+  function hhmm(v){var m=String(v||'').match(/^(\d{1,2}):(\d{2})/);return m?pad(+m[1])+':'+m[2]:'';}
+  /* Jam kartu: jadwal soal_aktif lebih dulu; bila kosong, cocokkan jadwal_ujian (mata pelajaran + kelas) */
+  function jamKartu(c){
+    if(c.start)return {a:fmtJam(new Date(c.start)),b:c.end?fmtJam(new Date(c.end)):''};
+    var m=nrm(c.mapel),k=nrm(c.kelas),t=todayStr();
+    var cand=jdw.filter(function(x){return nrm(x.mata_pelajaran)===m&&nrm(x.kelas)===k&&hhmm(x.jam_mulai);});
+    if(!cand.length)return {a:'',b:''};
+    var up=cand.filter(function(x){return String(x.tanggal).slice(0,10)>=t;});
+    var x=up.length?up[0]:cand[cand.length-1];
+    return {a:hhmm(x.jam_mulai),b:hhmm(x.jam_selesai)};
+  }
+  function cardHtml(c){
+    var st=stateOf(c),g=PAL[hash(c.mapel)%PAL.length].split(',');
+    var tgl='<span>Belum dijadwalkan</span>';
+    if(c.start){
+      var d=new Date(c.start);
+      tgl='<span>'+esc(fmtTgl(d))+(c.end?'<small>'+fmtJam(d)+' – '+fmtJam(new Date(c.end))+' WIB</small>':'<small>'+fmtJam(d)+' WIB</small>')+'</span>';
+    }
+    var jm=jamKartu(c);
+    return '<article class="cd '+st+'" role="button" tabindex="0" data-id="'+esc(c.id)+'" aria-label="Mulai mengawas '+esc(c.mapel)+(c.kelas?' kelas '+esc(c.kelas):'')+': '+esc(c.judul)+'" style="--c1:'+g[0]+';--c2:'+g[1]+'">'+
+      '<div class="cd-top"><i class="cd-av" aria-hidden="true">'+esc(initials(c.mapel))+'</i>'+
+        '<div class="cd-nm"><b title="'+esc(c.mapel)+'">'+esc(c.mapel)+'</b>'+(c.kelas?'<small>Kelas '+esc(c.kelas)+'</small>':'')+'</div></div>'+
+      '<h3 class="cd-jd" title="'+esc(c.judul)+'">'+esc(c.judul)+'</h3>'+
+      '<div class="cd-jm"><span>Mulai <b>'+(jm.a||'-')+'</b></span><span>Selesai <b>'+(jm.b||'-')+'</b></span></div>'+
+      '<div class="cd-ft"><div class="cd-tg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>'+tgl+'</div>'+
+      '<em class="cd-st">'+LBL[st]+'</em></div></article>';
+  }
+  function render(){
+    var el=$('list'),act=cards.filter(function(c){var s=stateOf(c);return s==='live'||s==='soon';}).length;
+    $('chipTotal').textContent=cards.length+' ujian · '+act+' aktif';
+    renderDays();
+    if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'<button type="button" data-retry="1">Coba lagi</button></div>';return;}
+    if(loading&&!cards.length){el.innerHTML='<div class="empty">Memuat…</div>';return;}
+    var list=sel==='all'?cards:cards.filter(function(c){return dayOf(c)===sel;});
+    if(!list.length){
+      var nm=DAYS.filter(function(d){return d.k===sel;})[0].t;
+      el.innerHTML='<div class="empty">'+(sel==='all'?'Belum ada paket soal. Buat dulu di halaman Daftar Soal.':'Tidak ada ujian terjadwal pada hari '+esc(nm)+'.')+'</div>';
+      return;
+    }
+    el.innerHTML='<div class="grid">'+sorted(list).map(cardHtml).join('')+'</div>';
+  }
+
+  $('days').addEventListener('click',function(e){
+    var b=e.target.closest('.dy');if(!b)return;
+    sel=b.dataset.k==='all'?'all':+b.dataset.k;
+    render();
+  });
+  $('list').addEventListener('click',function(e){if(e.target.closest('[data-retry]'))load();});
+
+  /* ---------- Validasi pengawas ke jadwal (tabel jadwal_ujian, halaman pengaturanujian.html) ---------- */
+  var IC={
+    hari:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17M9.5 13.5l5 5M14.5 13.5l-5 5"/></svg>',
+    kelas:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+    login:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
+    err:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l10 18H2zM12 10v4.5M12 17.5v.01"/></svg>'
+  };
+  function todayStr(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+  function nrm(x){return String(x==null?'':x).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();}
+
+  /* Guru yang login: sesi index.html (madani_session), sama seperti adminguru.html dan soal.html */
+  async function getGuru(){
+    var ses=null,n='';
+    try{ses=JSON.parse(sessionStorage.getItem('madani_session')||'null');}catch(_){}
+    if(ses&&ses.role==='guru'&&ses.id!=null){
+      try{
+        var rp=await db.from('profil').select('nama_guru').eq('id',ses.id).maybeSingle();
+        if(!rp.error&&rp.data&&rp.data.nama_guru)n=rp.data.nama_guru;
+      }catch(_){}
+    }
+    if(!n&&ses&&ses.nama)n=ses.nama;
+    if(!n){try{var ac=JSON.parse(sessionStorage.getItem('madani_acct')||'null');if(ac&&ac.nama)n=ac.nama;}catch(_){}}
+    return n;
+  }
+  async function cekPengawas(c){
+    var guru=await getGuru();
+    if(!guru)return {ok:false,why:'login'};
+    var today=todayStr();
+    var r=await db.from('jadwal_ujian').select('tanggal,mata_pelajaran,nama_pengawas,kelas').gte('tanggal',today).order('tanggal',{ascending:true}).range(0,999);
+    if(r.error)throw r.error;
+    var mine=(r.data||[]).filter(function(x){return String(x.tanggal).slice(0,10)===today&&nrm(x.nama_pengawas)===nrm(guru);});
+    if(!mine.length)return {ok:false,why:'hari'};
+    var cocok=mine.filter(function(x){return c.kelas&&nrm(x.kelas)===nrm(c.kelas);});
+    if(!cocok.length)return {ok:false,why:'kelas',mine:mine};
+    return {ok:true,today:today};
+  }
+
+  /* ---------- Modal pemberitahuan ---------- */
+  var lastFocus=null;
+  function showModal(v,msg,extra){
+    lastFocus=document.activeElement;
+    $('mdIc').className='mdl-ic v-'+v;$('mdIc').innerHTML=IC[v];
+    $('mdM').textContent=msg;
+    $('mdD').textContent=extra&&extra.date?extra.date:'';
+    var j='';
+    if(extra&&extra.mine&&extra.mine.length){
+      j='<div class="jd"><h4>Jadwal mengawas anda hari ini</h4><ul>'+extra.mine.map(function(x){
+        return '<li><b>'+esc(x.kelas)+'</b><span>'+esc(x.mata_pelajaran||'-')+'</span></li>';
+      }).join('')+'</ul></div>';
+    }
+    $('mdJ').innerHTML=j;
+    $('mbd').hidden=false;
+    setTimeout(function(){$('mdOk').focus();},30);
+  }
+  function closeModal(){
+    if($('mbd').hidden)return;
+    $('mbd').hidden=true;
+    if(lastFocus&&lastFocus.focus)try{lastFocus.focus();}catch(_){}
+  }
+  $('mdOk').addEventListener('click',closeModal);
+  $('mbd').addEventListener('mousedown',function(e){if(e.target===$('mbd'))closeModal();});
+  document.addEventListener('keydown',function(e){
+    if($('mbd').hidden)return;
+    if(e.key==='Escape')closeModal();
+    else if(e.key==='Tab'){e.preventDefault();$('mdOk').focus();}
+  });
+
+  var checking=false;
+  async function bukaKartu(el){
+    if(checking)return;
+    var c=cards.filter(function(x){return String(x.id)===el.dataset.id;})[0];if(!c)return;
+    checking=true;el.classList.add('chk');
+    try{
+      var v=await cekPengawas(c);
+      if(v.ok){
+        location.href='pengawaspantau.html?kelas='+encodeURIComponent(c.kelas)+'&tgl='+encodeURIComponent(v.today);
+        return;
+      }
+      if(v.why==='hari')showModal('hari','Maaf, anda tidak memiliki jadwal mengawas ujian hari ini.',{date:fmtTgl(new Date())});
+      else if(v.why==='kelas')showModal('kelas','Maaf, anda bukan pengawas untuk kelas ini, Silahkan lihat jadwal.',{mine:v.mine});
+      else showModal('login','Data login guru tidak ditemukan. Silakan login ulang lalu coba lagi.');
+    }catch(e){
+      var m=(e&&e.message)||String(e);
+      showModal('err','Gagal memeriksa jadwal pengawas: '+(/does not exist|schema cache/i.test(m)?'tabel jadwal_ujian belum ada di Supabase.':m));
+    }finally{checking=false;el.classList.remove('chk');}
+  }
+  $('list').addEventListener('click',function(e){
+    var el=e.target.closest('.cd');if(el)bukaKartu(el);
+  });
+  $('list').addEventListener('keydown',function(e){
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    var el=e.target.closest&&e.target.closest('.cd');if(!el)return;
+    e.preventDefault();bukaKartu(el);
+  });
+
+  /* ---------- Modal Jadwal Ujian & Pengawas (tabel jadwal_ujian, diisi dari pengaturanujian.html) ---------- */
+  var jRows=[],jGuru='',jBusy=false,jLast=null;
+  function jTgl(s){var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);if(!m)return s||'-';return new Date(+m[1],+m[2]-1,+m[3]).toLocaleDateString('id-ID',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});}
+  function jJam(r){
+    return {a:hhmm(r.jam_mulai||r.mulai||r.jam),b:hhmm(r.jam_selesai||r.selesai)};
+  }
+  function renderJadwal(){
+    var el=$('jBody'),mine=$('jMine').checked,past=$('jPast').checked,t=todayStr();
+    var list=jRows.filter(function(r){
+      var d=String(r.tanggal).slice(0,10);
+      if(!past&&d<t)return false;
+      if(mine&&!(jGuru&&nrm(r.nama_pengawas)===nrm(jGuru)))return false;
+      return true;
+    });
+    $('jCnt').textContent=list.length+' jadwal';
+    if(!list.length){
+      el.innerHTML='<div class="empty">'+(mine?'Anda belum memiliki jadwal mengawas'+(past?'.':' yang akan datang.'):past?'Belum ada jadwal ujian.':'Belum ada jadwal ujian yang akan datang.')+'</div>';
+      return;
+    }
+    var g={},ord=[];
+    list.forEach(function(r){var d=String(r.tanggal).slice(0,10);if(!g[d]){g[d]=[];ord.push(d);}g[d].push(r);});
+    ord.sort();
+    el.innerHTML=ord.map(function(d){
+      var rs=g[d].slice().sort(function(a,b){return String(jJam(a).a).localeCompare(String(jJam(b).a))||String(a.kelas).localeCompare(String(b.kelas),'id',{numeric:true});});
+      return '<section class="jday"><h4>'+esc(jTgl(d))+(d===t?'<em>Hari ini</em>':'')+'</h4>'+rs.map(function(r){
+        var me=jGuru&&nrm(r.nama_pengawas)===nrm(jGuru),jm=jJam(r);
+        return '<div class="jrow'+(me?' me':'')+'"><span class="kl">'+esc(r.kelas||'-')+'</span>'+
+          '<div class="mp">'+esc(r.mata_pelajaran||'-')+'</div>'+
+          '<div class="jm">'+((jm.a||jm.b)?'<span>Mulai <b>'+(jm.a||'-')+'</b></span><span>Selesai <b>'+(jm.b||'-')+'</b></span>':'<span class="no">Jam belum diatur</span>')+'</div>'+
+          '<div class="pg">Pengawas: <b>'+esc(r.nama_pengawas||'Belum ditentukan')+'</b></div></div>';
+      }).join('')+'</section>';
+    }).join('');
+  }
+  async function bukaJadwal(){
+    if(jBusy)return;
+    jBusy=true;jLast=document.activeElement;
+    $('jbd').hidden=false;$('jBody').innerHTML='<div class="empty">Memuat…</div>';$('jCnt').textContent='';
+    setTimeout(function(){$('jOk').focus();},30);
+    try{
+      if(!db)throw new Error('Supabase tidak tersedia');
+      var res=await Promise.all([
+        db.from('jadwal_ujian').select('*').order('tanggal',{ascending:true}).range(0,999),
+        getGuru().catch(function(){return '';})
+      ]);
+      if(res[0].error)throw res[0].error;
+      jRows=res[0].data||[];jGuru=res[1]||'';
+      renderJadwal();
+    }catch(e){
+      var m=(e&&e.message)||String(e);
+      $('jBody').innerHTML='<div class="empty err">Gagal memuat jadwal: '+esc(/does not exist|schema cache/i.test(m)?'tabel jadwal_ujian belum ada di Supabase.':/permission denied/i.test(m)?'akses tabel jadwal_ujian ditolak (periksa RLS).':m)+'<button type="button" id="jRetry">Coba lagi</button></div>';
+      var rt=$('jRetry');if(rt)rt.addEventListener('click',function(){jBusy=false;bukaJadwal();});
+    }finally{jBusy=false;}
+  }
+  function tutupJadwal(){
+    if($('jbd').hidden)return;
+    $('jbd').hidden=true;
+    if(jLast&&jLast.focus)try{jLast.focus();}catch(_){}
+  }
+  $('bJadwal').addEventListener('click',bukaJadwal);
+  $('jOk').addEventListener('click',tutupJadwal);
+  $('jbd').addEventListener('mousedown',function(e){if(e.target===$('jbd'))tutupJadwal();});
+  $('jMine').addEventListener('change',renderJadwal);
+  $('jPast').addEventListener('change',renderJadwal);
+  document.addEventListener('keydown',function(e){
+    if($('jbd').hidden)return;
+    if(e.key==='Escape'){tutupJadwal();return;}
+    if(e.key==='Tab'){   /* fokus tetap di dalam modal */
+      var f=Array.prototype.slice.call($('jbd').querySelectorAll('button,input')).filter(function(x){return !x.disabled;});
+      if(!f.length)return;
+      var first=f[0],last=f[f.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  });
+
+  $('bRefresh').addEventListener('click',load);
+
+  /* Segarkan otomatis tiap menit, dan saat tab kembali dibuka */
+  setInterval(load,60000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)load();});
+
+  loadProfil();load();
+})();
+</script>
+</body>
+</html>
