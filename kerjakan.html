@@ -180,7 +180,8 @@ async function init(){
       if(!st)st={mulai:Date.now(),ans:{},flag:{},cur:0,viol:0};
       deadline=Math.min(st.mulai+A.durasi_menit*60000,new Date(A.selesai).getTime());
       const was=st.lock;st.lock=true;save();start();lockStart();
-      if(was)violate('Halaman ditutup atau dimuat ulang',true);
+      stopWatch();
+      chkStop().then(()=>{if(was&&!stopped)violate('Halaman ditutup atau dimuat ulang',true);});
     });
   }catch(e){
     const m=(e&&e.message)||String(e);
@@ -268,9 +269,33 @@ function violate(reason,quiet){
 const KET_MAP={'Kamu berpindah tab atau aplikasi':'Berpindah tab/aplikasi atau menggeser layar untuk menutup','Halaman ujian kehilangan fokus':'Halaman ujian kehilangan fokus (pindah jendela/aplikasi)','Kamu keluar dari layar penuh':'Keluar dari layar penuh','Kamu menekan tombol Kembali':'Menekan tombol Kembali','Mencoba mengambil screenshot':'Mencoba mengambil screenshot','Halaman ditutup atau dimuat ulang':'Halaman ditutup atau dimuat ulang'};
 const ketOf=r=>KET_MAP[r]||r;
 let ujP=Promise.resolve();
-function ujSync(patch){
+/* mode 'open' = hanya jika jam_selesai masih kosong (tidak menimpa penghentian pengawas); mode 'mg' = hanya jika status masih Mengerjakan */
+function ujSync(patch,mode){
   if(!ses||!ses.ujian_id)return;
-  ujP=ujP.then(()=>db.from('ujian_berlangsung').update(patch).eq('id',ses.ujian_id)).then(r=>{if(r&&r.error)console.warn('ujian_berlangsung:',r.error.message);}).catch(()=>{});
+  ujP=ujP.then(()=>{
+    let q=db.from('ujian_berlangsung').update(patch).eq('id',ses.ujian_id);
+    if(mode==='open')q=q.is('jam_selesai',null);else if(mode==='mg')q=q.eq('status','Mengerjakan');
+    return q;
+  }).then(r=>{if(r&&r.error)console.warn('ujian_berlangsung:',r.error.message);}).catch(()=>{});
+}
+/* ---------- Pengawas menghentikan ujian (slider di pantauujian.html): siswa keluar paksa & jawaban dikirim otomatis ----------
+   Penanda: status = Pelanggaran DAN jam_selesai terisi (pelanggaran otomatis siswa tidak pernah mengisi jam_selesai sebelum kirim). */
+let stopped=false,stopKet='',stopT=null,stopBound=false;
+async function chkStop(){
+  if(stopped||finished||busy||!ses||!ses.ujian_id)return;
+  try{
+    const r=await db.from('ujian_berlangsung').select('status,keterangan,jam_selesai').eq('id',ses.ujian_id).maybeSingle();
+    if(r.error||!r.data||stopped||finished||busy)return;
+    if(r.data.status==='Pelanggaran'&&r.data.jam_selesai){
+      stopped=true;stopKet=r.data.keterangan||'';clearInterval(stopT);
+      toast('Ujian dihentikan oleh pengawas. Jawaban dikirim otomatis.');
+      submit();
+    }
+  }catch(_){}
+}
+function stopWatch(){
+  clearInterval(stopT);stopT=setInterval(chkStop,5000);
+  if(!stopBound){stopBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden)chkStop();});}
 }
 function catatPelanggaran(reason,kunci){
   st.ket=Array.isArray(st.ket)?st.ket:[];
@@ -278,7 +303,8 @@ function catatPelanggaran(reason,kunci){
   st.ket.push(ketOf(reason)+' ('+t+')');
   let k=st.ket.map((x,i)=>(i+1)+'. '+x).join('; ');
   if(kunci)k+='. Batas pelanggaran tercapai, ujian dikunci dan jawaban dikirim otomatis.';
-  ujSync({status:'Pelanggaran',keterangan:k});
+  if(stopped)return;
+  ujSync({status:'Pelanggaran',keterangan:k},'open');
 }
 function lockConfirm(m){
   lockPause=true;let r=false;
@@ -668,8 +694,8 @@ async function simpanKeNilaiKelas(nilai){
 }
 
 async function submit(){
-  if(busy||finished)return;busy=true;clearInterval(timer);hideWarn();lockOff();
-  app.innerHTML='<div class="card st"><h2>'+(timeUp?'Waktu habis':lockOut?'Ujian dikunci':'Mengirim jawaban…')+'</h2><p>'+(timeUp||lockOut?'Jawaban yang sudah kamu isi sedang dikirim. Jangan tutup halaman ini.':'Jangan tutup halaman ini.')+'</p></div>';
+  if(busy||finished)return;busy=true;clearInterval(timer);clearInterval(stopT);hideWarn();lockOff();
+  app.innerHTML='<div class="card st"><h2>'+(stopped?'Ujian dihentikan pengawas':timeUp?'Waktu habis':lockOut?'Ujian dikunci':'Mengirim jawaban…')+'</h2><p>'+(stopped||timeUp||lockOut?'Jawaban yang sudah kamu isi sedang dikirim. Jangan tutup halaman ini.':'Jangan tutup halaman ini.')+'</p></div>';
   $('tm').hidden=true;document.querySelector('.bar')&&document.querySelector('.bar').remove();
   if(pending.size){await Promise.race([Promise.all(Array.from(pending)),new Promise(r=>setTimeout(r,60000))]);}
   try{
@@ -711,7 +737,7 @@ async function submit(){
   if(!dup&&nilai!==null){try{nl=await simpanKeNilaiKelas(nilai);}catch(e){nl={ok:false,msg:(e&&e.message)||String(e)};}}
   finished=true;
   {const d=new Date(),jm=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
-   ujSync((st.viol||0)>0?{jam_selesai:jm}:{status:'Selesai',jam_selesai:jm});} /* ada pelanggaran: status tetap Pelanggaran */
+   if(!stopped)ujSync((st.viol||0)>0?{jam_selesai:jm}:{status:'Selesai',jam_selesai:jm},(st.viol||0)>0?null:'mg');} /* ada pelanggaran: status tetap Pelanggaran */
   await Promise.race([ujP,new Promise(r=>setTimeout(r,3000))]);
   if(saved){try{localStorage.removeItem(KEY);}catch(_){}try{sessionStorage.removeItem('madani_asesmen');}catch(_){}}
   done({nilai:nilai,skor_otomatis:skor,skor_maks:maks,perlu_koreksi:essay},false,saved,nl);
@@ -721,7 +747,8 @@ function done(r,already,saved,nl){
   $('tm').hidden=true;const bar=document.querySelector('.bar');if(bar)bar.remove();
   const kor=P&&P.bentuk==='praktikum'?'Hasil praktikmu akan dinilai oleh gurumu.':'Soal uraian akan dinilai oleh gurumu.';
   let h='<div class="card st"><h2>'+(already?'Kamu sudah mengerjakan asesmen ini':'Jawaban terkirim ✓')+'</h2>';
-  if(lockOut&&!already)h+='<p style="color:var(--red);margin-bottom:6px">Ujian dikunci karena pelanggaran mencapai batas ('+LOCK.MAX+'x). Jawaban terkirim otomatis.</p>';
+  if(stopped&&!already)h+='<p style="color:var(--red);margin-bottom:6px">Ujianmu dihentikan oleh pengawas'+(stopKet?': '+esc(stopKet):'')+'. Jawaban yang sudah kamu isi terkirim otomatis.</p>';
+  else if(lockOut&&!already)h+='<p style="color:var(--red);margin-bottom:6px">Ujian dikunci karena pelanggaran mencapai batas ('+LOCK.MAX+'x). Jawaban terkirim otomatis.</p>';
   if(SHOW_NILAI&&r.nilai!=null){
     h+='<div class="big">'+r.nilai+'</div><p>Skor '+r.skor_otomatis+' dari '+r.skor_maks+(P&&P.kkm!=null?' · KKM '+P.kkm:'')+'</p>';
     if(r.perlu_koreksi)h+='<p style="margin-top:6px">Nilai sementara. '+kor+'</p>';
