@@ -235,7 +235,7 @@ td.ket{min-width:220px;font-size:13px;color:#7a1d14}
     var list=all.filter(function(r){return r.status===tab;}),el=$('panelList');
     el.setAttribute('aria-labelledby','tab-'+tab);
     if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
-    if(!list.length){el.innerHTML='<div class="empty">'+(rows.length&&all.length===0?'Tidak ada data yang cocok dengan filter.':EMPTY[tab])+'</div>';return;}
+    if(!list.length){el.innerHTML='<div class="empty">'+(rows.length&&all.length===0?'Tidak ada data yang cocok dengan filter.':!rows.length&&$('fTgl').value?'Belum ada data pada tanggal '+fmtTgl($('fTgl').value)+'. Kosongkan filter tanggal untuk melihat semua tanggal.':EMPTY[tab])+'</div>';return;}
     var ket=tab==='Pelanggaran';
     el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th>':'')+'</tr></thead><tbody>'+
       list.map(function(r,i){
