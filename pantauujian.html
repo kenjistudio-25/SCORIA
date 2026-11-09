@@ -90,6 +90,8 @@ td.aksi{white-space:nowrap}
 .sw input:checked+.trk{background:var(--red)}
 .sw input:checked+.trk::after{transform:translateX(20px)}
 .sw input:focus-visible+.trk{outline:3px solid var(--accent);outline-offset:2px}
+.sw.ok{color:var(--green)}
+.sw.ok input:checked+.trk{background:var(--green)}
 .sw input:disabled+.trk{opacity:.5}
 .sw input:disabled~span{opacity:.6}
 
@@ -254,6 +256,9 @@ td.aksi{white-space:nowrap}
   function aksiCell(r){
     return '<td class="aksi" data-l="Aksi"><label class="sw"><input type="checkbox" role="switch" class="swStop" data-id="'+esc(r.id)+'" aria-label="Hentikan ujian '+esc(r.nama_siswa)+'"><span class="trk" aria-hidden="true"></span><span>Hentikan Ujian</span></label></td>';
   }
+  function lanjutCell(r){
+    return '<td class="aksi" data-l="Aksi"><label class="sw ok"><input type="checkbox" role="switch" class="swGo" data-id="'+esc(r.id)+'" aria-label="Lanjutkan ujian '+esc(r.nama_siswa)+'"><span class="trk" aria-hidden="true"></span><span>Lanjutkan Ujian</span></label></td>';
+  }
   function render(){
     buildKelas();
     var all=filtered(),cnt={Mengerjakan:0,Selesai:0,Pelanggaran:0};
@@ -265,9 +270,9 @@ td.aksi{white-space:nowrap}
     if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
     if(!list.length){el.innerHTML='<div class="empty">'+(rows.length&&all.length===0?'Tidak ada data yang cocok dengan filter.':!rows.length&&$('fTgl').value?'Belum ada data pada tanggal '+fmtTgl($('fTgl').value)+'. Kosongkan filter tanggal untuk melihat semua tanggal.':EMPTY[tab])+'</div>';return;}
     var ket=tab==='Pelanggaran',mg=tab==='Mengerjakan';
-    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th>':'')+(mg?'<th>Keterangan</th><th>Aksi</th>':'')+'</tr></thead><tbody>'+
+    el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Nama Siswa</th><th>NISN</th><th>Kelas</th><th>Jenis Ujian</th><th>Tanggal</th><th class="num">Jam Mulai</th><th class="num">Jam Selesai</th><th>Status</th>'+(ket?'<th>Keterangan</th><th>Aksi</th>':'')+(mg?'<th>Keterangan</th><th>Aksi</th>':'')+'</tr></thead><tbody>'+
       list.map(function(r,i){
-        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="nm" data-l="Nama">'+esc(r.nama_siswa)+'</td><td data-l="NISN">'+esc(r.nisn)+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td><td data-l="Jenis Ujian">'+esc(r.jenis_ujian)+'</td><td data-l="Tanggal">'+fmtTgl(r.tanggal)+'</td><td class="num" data-l="Jam Mulai">'+fmtJam(r.jam_mulai)+'</td><td class="num" data-l="Jam Selesai">'+fmtJam(r.jam_selesai)+'</td><td data-l="Status"><span class="bdg '+esc(r.status)+'">'+esc(r.status)+'</span></td>'+(ket?'<td class="ket" data-l="Keterangan">'+(esc(r.keterangan)||'-')+'</td>':'')+(mg?ketCell(r)+aksiCell(r):'')+'</tr>';
+        return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="nm" data-l="Nama">'+esc(r.nama_siswa)+'</td><td data-l="NISN">'+esc(r.nisn)+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td><td data-l="Jenis Ujian">'+esc(r.jenis_ujian)+'</td><td data-l="Tanggal">'+fmtTgl(r.tanggal)+'</td><td class="num" data-l="Jam Mulai">'+fmtJam(r.jam_mulai)+'</td><td class="num" data-l="Jam Selesai">'+fmtJam(r.jam_selesai)+'</td><td data-l="Status"><span class="bdg '+esc(r.status)+'">'+esc(r.status)+'</span></td>'+(ket?'<td class="ket" data-l="Keterangan">'+(esc(r.keterangan)||'-')+'</td>'+lanjutCell(r):'')+(mg?ketCell(r)+aksiCell(r):'')+'</tr>';
       }).join('')+'</tbody></table></div>';
   }
 
@@ -294,6 +299,7 @@ td.aksi{white-space:nowrap}
     var t=e.target;
     if(t.classList.contains('selKet')){picks[t.dataset.id]=t.value;return;}
     if(t.classList.contains('swStop')&&t.checked)stopExam(t);
+    if(t.classList.contains('swGo')&&t.checked)resumeExam(t);
   });
   async function stopExam(cb){
     var id=cb.dataset.id,sel=panel.querySelector('select.selKet[data-id="'+id+'"]'),val=sel?sel.value:'';
@@ -313,6 +319,32 @@ td.aksi{white-space:nowrap}
       alert('Gagal menghentikan ujian: '+((err&&err.message)||err));
       return;
     }
+    load();
+  }
+
+  /* ---------- Aksi: lanjutkan ujian (hanya jika waktu ujian belum berakhir) ---------- */
+  async function resumeExam(cb){
+    var id=cb.dataset.id,r=rows.filter(function(x){return String(x.id)===String(id);})[0]||{};
+    var bad=function(m){cb.checked=false;cb.disabled=false;alert(m);};
+    if(!confirm('Izinkan '+(r.nama_siswa||'siswa ini')+' melanjutkan ujian?\nSiswa masuk lagi memakai token yang sama, jawaban sebelumnya dipulihkan, dan sisa waktu tetap berjalan sejak mulai ujian.')){cb.checked=false;return;}
+    cb.disabled=true;
+    try{
+      var h=await db.from('hasil_asesmen').select('soal_aktif_id,mulai,dikirim').eq('nisn',String(r.nisn)).eq('kategori',r.jenis_ujian).order('dikirim',{ascending:false}).limit(20);
+      if(h.error)throw h.error;
+      if(!h.data||!h.data.length)return bad('Belum ada jawaban terkirim untuk siswa ini (siswa mungkin masih mengerjakan). Ujian hanya bisa dilanjutkan setelah jawaban terkirim.');
+      var t0=new Date(r.tanggal+'T'+String(r.jam_mulai).slice(0,8)).getTime(),pick=h.data[0],best=Infinity;
+      h.data.forEach(function(x){var d=Math.abs(Date.parse(x.mulai)-t0);if(d<best){best=d;pick=x;}});
+      var sa=await db.from('soal_aktif').select('aktif,selesai,durasi_menit').eq('id',pick.soal_aktif_id).maybeSingle();
+      if(sa.error)throw sa.error;
+      if(!sa.data||!sa.data.aktif)return bad('Asesmen ini sudah dinonaktifkan, ujian tidak bisa dilanjutkan.');
+      var dl=Math.min(Date.parse(pick.mulai)+(+sa.data.durasi_menit)*60000,Date.parse(sa.data.selesai));
+      if(!(dl>Date.now()))return bad('Waktu ujian sudah berakhir (pukul '+new Date(dl).toLocaleTimeString('id-ID')+'), jadi tidak bisa dilanjutkan.');
+      var prev=String(r.keterangan||'').replace(/\s+/g,' ').trim();if(prev.length>70)prev=prev.slice(0,70)+'…';
+      var d=new Date(dl),jam=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+      var u=await db.from('ujian_berlangsung').update({status:'Mengerjakan',keterangan:'Dilanjutkan pengawas'+(prev?' (sebelumnya: '+prev+')':''),jam_selesai:jam}).eq('id',id).eq('status','Pelanggaran').select('id');
+      if(u.error)throw u.error;
+      if(!u.data||!u.data.length)return bad('Status siswa ini sudah berubah. Data diperbarui.');
+    }catch(err){return bad('Gagal melanjutkan ujian: '+((err&&err.message)||err));}
     load();
   }
 
