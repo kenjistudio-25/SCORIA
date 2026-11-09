@@ -490,6 +490,31 @@ body.lock{overflow:hidden}
   $('tkBd').addEventListener('mousedown',function(e){if(e.target===$('tkBd'))closeTk();});
   document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeTk();closeRw();}});
   $('tkIn').addEventListener('input',function(){this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'');$('tkErr').textContent='';});
+  /* ---------- Catat ke tabel ujian_berlangsung saat siswa menekan Mulai ---------- */
+  function pad2(n){return (n<10?'0':'')+n;}
+  function dStr(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());}
+  function tStr(d){return pad2(d.getHours())+':'+pad2(d.getMinutes())+':'+pad2(d.getSeconds());}
+  var skipRec=false; /* true setelah siswa diberi tahu pencatatan gagal; klik Mulai berikutnya tetap masuk ujian */
+  async function catatUjian(selesaiIso){
+    try{
+      var sr=await db.from('siswa').select('nama,nisn,rombel').eq('id',sess.id).maybeSingle();
+      var s=(sr&&sr.data)||{};
+      var now=new Date(),end=new Date(now.getTime()+(+cur.durasi||0)*60000),lim=new Date(selesaiIso);
+      if(!isNaN(lim.getTime())&&lim<end)end=lim; /* batas selesai tidak melewati penutupan asesmen */
+      var ins=await db.from('ujian_berlangsung').insert({
+        nama_siswa:String(s.nama||sess.nama||'').trim(),
+        nisn:String(s.nisn||''),
+        kelas:s.rombel||kelas||sess.kelas||'',
+        jenis_ujian:katLabel(cur),
+        tanggal:dStr(now),
+        jam_mulai:tStr(now),
+        jam_selesai:tStr(end),
+        status:'Mengerjakan'
+      }).select('id').single();
+      if(ins.error)throw ins.error;
+      return {id:ins.data.id};
+    }catch(e){console.error('ujian_berlangsung:',e);return {id:null,err:(e&&(e.message||e.details))||String(e)};}
+  }
   $('tkForm').addEventListener('submit',async function(ev){
     ev.preventDefault();if(tkBusy||!cur)return;
     var t=$('tkIn').value.trim();
@@ -501,7 +526,14 @@ body.lock{overflow:hidden}
       if(!r.data){$('tkErr').textContent='Token salah. Periksa lagi.';}
       else if(Date.now()>new Date(r.data.selesai).getTime()){$('tkErr').textContent='Waktu asesmen sudah berakhir.';}
       else{
-        try{sessionStorage.setItem('madani_asesmen',JSON.stringify({soal_aktif_id:cur.aid,paket_id:cur.pid,durasi:cur.durasi,selesai:r.data.selesai,t:Date.now()}));}catch(_){}
+        var rec=await catatUjian(r.data.selesai);
+        if(rec.err&&!skipRec){
+          skipRec=true;
+          $('tkErr').textContent='Data ujian gagal tercatat: '+rec.err+'. Laporkan ke guru, atau tekan Mulai sekali lagi untuk tetap masuk ujian.';
+          tkBusy=false;$('tkOk').disabled=false;$('tkOk').textContent='Mulai';return;
+        }
+        var ujianId=rec.id;
+        try{sessionStorage.setItem('madani_asesmen',JSON.stringify({soal_aktif_id:cur.aid,paket_id:cur.pid,durasi:cur.durasi,selesai:r.data.selesai,ujian_id:ujianId,t:Date.now()}));}catch(_){}
         tkBusy=false;
         location.href='kerjakan.html?paket='+encodeURIComponent(cur.pid);
         return;
