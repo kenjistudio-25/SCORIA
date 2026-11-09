@@ -329,9 +329,9 @@ function catatPelanggaran(reason,kunci){
   st.ket=Array.isArray(st.ket)?st.ket:[];
   const d=new Date(),t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':');
   st.ket.push(ketOf(reason)+' ('+t+')');
-  let k=st.ket.map((x,i)=>(i+1)+'. '+x).join('; ');
-  if(kunci)k+='. Batas pelanggaran tercapai, ujian dikunci dan jawaban dikirim otomatis.';
-  if(stopped)return;
+  /* Pelanggaran ke-1 dan ke-2 hanya dicatat di perangkat siswa (peringatan). Status Pelanggaran di Supabase baru diisi saat mencapai batas (ke-MAX). */
+  if(!kunci||stopped)return;
+  const k=st.ket.map((x,i)=>(i+1)+'. '+x).join('; ')+'. Batas pelanggaran tercapai, ujian dikunci dan jawaban dikirim otomatis.';
   ujSync({status:'Pelanggaran',keterangan:k},'open');
 }
 function lockConfirm(m){
