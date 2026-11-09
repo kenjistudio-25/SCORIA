@@ -30,7 +30,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 .sname small{display:block;font-size:11px;font-weight:500;color:var(--muted)}
 .sp{flex:1}
 .live{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted);padding:6px 12px;border-radius:99px;background:var(--track)}
-.live i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(31,157,58,.5);animation:pl 1.8s infinite}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--green)}
 .live.off i{background:#999;animation:none}
 @keyframes pl{70%{box-shadow:0 0 0 7px rgba(31,157,58,0)}100%{box-shadow:0 0 0 0 rgba(31,157,58,0)}}
 
@@ -157,7 +157,6 @@ td.aksi{white-space:nowrap}
       <input id="fTgl" type="date" aria-label="Tanggal ujian">
       <select id="fKelas" aria-label="Filter kelas"><option value="">Semua kelas</option></select>
       <div class="search"><input id="fQ" type="search" placeholder="Cari nama atau NISN…" aria-label="Cari nama atau NISN"></div>
-      <label class="tg"><input type="checkbox" id="fAuto" checked> Perbarui otomatis</label>
     </div>
 
     <div class="tabs" role="tablist" aria-label="Status ujian">
@@ -183,7 +182,6 @@ td.aksi{white-space:nowrap}
 (function(){
   var SB_URL='https://vvlngdwghdhrrnpczier.supabase.co';
   var SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2bG5nZHdnaGRocnJucGN6aWVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MDI1MzgsImV4cCI6MjEwNzk3ODUzOH0.kV3y6rUu0NKbV451dvD4SkeZRJtuLNzwoA81tUY8jiA';
-  var POLL_MS=10000;
   var db=window.supabase.createClient(SB_URL,SB_KEY);
   var $=function(i){return document.getElementById(i);};
   var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -192,7 +190,7 @@ td.aksi{white-space:nowrap}
   var EMPTY={Mengerjakan:'Belum ada siswa yang sedang mengerjakan ujian.',Selesai:'Belum ada siswa yang selesai mengerjakan ujian.',Pelanggaran:'Tidak ada siswa yang melakukan pelanggaran.'};
   var KET_OPSI=['Mencontek','Melanggar Tata Tertib Ujian','Membuat Kegaduhan selama ujian'];
   var picks={};
-  var rows=[],tab='Mengerjakan',timer=null,loading=false,loadErr='';
+  var rows=[],tab='Mengerjakan',loading=false,loadErr='';
 
   function pad(n){return (n<10?'0':'')+n;}
   function todayStr(){var d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
@@ -210,6 +208,29 @@ td.aksi{white-space:nowrap}
     }catch(_){}
   }
 
+  /* ---------- Buang baris ganda/basi siswa yang sama ----------
+     Baris 'Mengerjakan' yang dimulai sebelum jam selesai baris Selesai/Pelanggaran milik siswa & ujian yang sama = sisa percobaan lama.
+     Baris 'Pelanggaran' yang kemudian diikuti baris 'Selesai' (id lebih baru) = sudah dilanjutkan guru. Disembunyikan dan dihapus dari Supabase. */
+  function purgeStale(list){
+    var gk=function(r){return [r.nisn,r.jenis_ujian,r.tanggal].join('|');};
+    var endT={},selId={};
+    list.forEach(function(r){
+      var k=gk(r);
+      if((r.status==='Selesai'||r.status==='Pelanggaran')&&r.jam_selesai){var j=String(r.jam_selesai);if(!endT[k]||j>endT[k])endT[k]=j;}
+      if(r.status==='Selesai'&&(!selId[k]||r.id>selId[k]))selId[k]=r.id;
+    });
+    var stale=list.filter(function(r){
+      var k=gk(r);
+      if(r.status==='Mengerjakan')return !!endT[k]&&String(r.jam_mulai)<=endT[k];
+      if(r.status==='Pelanggaran')return !!selId[k]&&selId[k]>r.id;
+      return false;
+    });
+    if(!stale.length)return list;
+    var ids=stale.map(function(r){return r.id;});
+    try{db.from('ujian_berlangsung').delete().in('id',ids).then(function(x){if(x&&x.error)console.warn('purge:',x.error.message);},function(){});}catch(_){}
+    return list.filter(function(r){return ids.indexOf(r.id)<0;});
+  }
+
   /* ---------- Ambil data ---------- */
   async function load(manual){
     if(loading)return;loading=true;
@@ -219,8 +240,8 @@ td.aksi{white-space:nowrap}
       var tgl=$('fTgl').value;if(tgl)q=q.eq('tanggal',tgl);
       var r=await q;
       if(r.error)throw r.error;
-      rows=r.data||[];loadErr='';
-      $('live').classList.remove('off');$('liveTxt').textContent='Langsung';
+      rows=purgeStale(r.data||[]);loadErr='';
+      $('live').classList.remove('off');$('liveTxt').textContent='Terhubung';
       $('upd').textContent='Diperbarui '+new Date().toLocaleTimeString('id-ID')+(tgl?' · tanggal '+fmtTgl(tgl):' · semua tanggal');
     }catch(e){
       var m=(e&&e.message)||String(e);
@@ -353,13 +374,9 @@ td.aksi{white-space:nowrap}
   $('fQ').addEventListener('input',render);
   $('fTgl').addEventListener('change',function(){load();});
   $('bRef').addEventListener('click',function(){load(true);});
-  function startPoll(){stopPoll();if($('fAuto').checked)timer=setInterval(function(){if(!document.hidden)load();},POLL_MS);}
-  function stopPoll(){if(timer){clearInterval(timer);timer=null;}}
-  $('fAuto').addEventListener('change',function(){startPoll();$('live').classList.toggle('off',!$('fAuto').checked);$('liveTxt').textContent=$('fAuto').checked?'Langsung':'Jeda';});
-  document.addEventListener('visibilitychange',function(){if(!document.hidden&&$('fAuto').checked)load();});
 
   $('fTgl').value=todayStr();
-  loadProfil();load();startPoll();
+  loadProfil();load();
 })();
 </script>
 </body>
