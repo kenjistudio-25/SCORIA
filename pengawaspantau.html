@@ -130,6 +130,18 @@ td.aksi{white-space:nowrap}
   .d .ic svg{width:25px;height:25px}
 }
 @media (prefers-reduced-motion:reduce){.live i,.d.spin .ic svg{animation:none}}
+
+/* Token ujian */
+.tkn{margin:0 0 16px;padding:14px 16px}
+.tkn h2{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.02em;text-transform:uppercase;margin-bottom:10px}
+.tkn-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.tk{background:var(--card);border-radius:14px;padding:12px 14px;box-shadow:0 0 0 .5px var(--line);display:flex;flex-direction:column;gap:4px;min-width:0}
+.tk small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk b.mp{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk .kd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:28px;font-weight:800;letter-spacing:.14em;color:var(--accent);line-height:1.2;word-break:break-all}
+.tk .kd.no{font-size:14px;letter-spacing:0;font-weight:600;color:var(--muted)}
+.tk button.cp{align-self:flex-start;font-size:12px;font-weight:600;padding:5px 12px;border-radius:99px;background:var(--track)}
+.tkn .none{font-size:14px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -151,6 +163,8 @@ td.aksi{white-space:nowrap}
     </div>
     <span class="chip" id="chipTotal">0 siswa</span>
   </div>
+
+  <section class="panel tkn" id="tknBox" aria-label="Token ujian" hidden></section>
 
   <section class="panel box" aria-label="Daftar siswa ujian">
     <div class="tools">
@@ -406,10 +420,62 @@ td.aksi{white-space:nowrap}
     load();
   }
 
+  /* ---------- Token ujian untuk kelas terpilih (paket_soal + soal_aktif) ---------- */
+  var JENIS_KEYS=['jenis_ujian','jenisujian','jenis_asesmen','jenis','tipe_ujian','tipe','kategori'];
+  function isUAS(p){
+    var v=null;
+    for(var i=0;i<JENIS_KEYS.length;i++){if(p[JENIS_KEYS[i]]!=null&&String(p[JENIS_KEYS[i]]).trim()!==''){v=p[JENIS_KEYS[i]];break;}}
+    if(v==null)v=p.judul||'';
+    v=String(v).toLowerCase();
+    return /\buas\b/.test(v)||/akhir\s*semester/.test(v);
+  }
+  function tokenOf(a){
+    var ks=['token','kode_token','token_ujian','kode'];
+    for(var i=0;i<ks.length;i++){if(a[ks[i]]!=null&&String(a[ks[i]]).trim()!=='')return String(a[ks[i]]);}
+    return '';
+  }
+  var tokenBusy=false;
+  async function loadToken(){
+    var box=$('tknBox'),kl=$('fKelas').value;
+    if(!kl){box.hidden=true;box.innerHTML='';return;}
+    if(tokenBusy)return;tokenBusy=true;
+    try{
+      var res=await Promise.all([
+        db.from('paket_soal').select('*').eq('kelas',kl).order('id',{ascending:false}).range(0,999),
+        db.from('soal_aktif').select('*').order('id',{ascending:false}).range(0,999)
+      ]);
+      if(res[0].error)throw res[0].error;
+      if(res[1].error)throw res[1].error;
+      var akt={};res[1].data.forEach(function(r){if(!akt[r.paket_id])akt[r.paket_id]=r;});
+      var tgl=$('fTgl').value;
+      var list=(res[0].data||[]).filter(isUAS).map(function(p){return {p:p,a:akt[p.id]||null};}).filter(function(x){
+        if(!x.a)return false;
+        if(!tgl||!x.a.mulai)return !!x.a.aktif||!x.a.mulai;
+        return String(x.a.mulai).slice(0,10)===tgl;
+      });
+      list.sort(function(x,y){return String(x.p.matapelajaran||'').localeCompare(String(y.p.matapelajaran||''),'id',{numeric:true});});
+      box.hidden=false;
+      box.innerHTML='<h2>Token Ujian · Kelas '+esc(kl)+'</h2>'+(list.length?'<div class="tkn-list">'+list.map(function(x){
+        var t=tokenOf(x.a);
+        return '<div class="tk"><b class="mp" title="'+esc(x.p.matapelajaran||'')+'">'+esc(x.p.matapelajaran||'Tanpa mata pelajaran')+'</b><small title="'+esc(x.p.judul||'')+'">'+esc(x.p.judul||'')+'</small>'+
+          (t?'<div class="kd">'+esc(t)+'</div><button type="button" class="cp" data-t="'+esc(t)+'">Salin token</button>':'<div class="kd no">Token belum tersedia</div>')+'</div>';
+      }).join('')+'</div>':'<p class="none">Belum ada token ujian UAS untuk kelas ini pada tanggal terpilih.</p>');
+    }catch(e){
+      box.hidden=false;box.innerHTML='<h2>Token Ujian · Kelas '+esc(kl)+'</h2><p class="none">Gagal memuat token: '+esc((e&&e.message)||String(e))+'</p>';
+    }finally{tokenBusy=false;}
+  }
+  $('tknBox').addEventListener('click',function(e){
+    var b=e.target.closest('.cp');if(!b)return;
+    var t=b.dataset.t;
+    function ok(){b.textContent='Tersalin ✓';setTimeout(function(){b.textContent='Salin token';},1500);}
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(ok,function(){});
+    else{var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy');ok();}catch(_){}document.body.removeChild(i);}
+  });
+
   /* ---------- Filter & auto-refresh ---------- */
-  $('fKelas').addEventListener('change',render);
+  $('fKelas').addEventListener('change',function(){render();loadToken();});
   $('fQ').addEventListener('input',render);
-  $('fTgl').addEventListener('change',function(){buildKelas();load();});
+  $('fTgl').addEventListener('change',function(){buildKelas();load();loadToken();});
   $('bRef').addEventListener('click',function(){load(true);});
 
   /* Dibuka dari pantauujianpengawas.html: tanggal dan kelas yang diawasi langsung terpilih (tetap bisa diubah) */
@@ -419,7 +485,8 @@ td.aksi{white-space:nowrap}
     if(qt&&/^\d{4}-\d{2}-\d{2}$/.test(qt))$('fTgl').value=qt;
     if(qk){var o=document.createElement('option');o.value=qk;o.textContent=qk;$('fKelas').appendChild(o);$('fKelas').value=qk;}
   }catch(_){}
-  loadProfil();load();loadKelasMaster();
+  loadProfil();load();loadKelasMaster();loadToken();
+  setInterval(loadToken,60000);
 })();
 </script>
 </body>
