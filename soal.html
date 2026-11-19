@@ -2369,10 +2369,11 @@ a.kls.mt:hover{color:var(--accent);text-decoration:underline}
     var m=String(x&&x.u||'').match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:export=\w+&)?id=)([\w-]+)/);
     return m?m[1]:(x&&/^[\w-]{25,}$/.test(String(x.id||''))?String(x.id):'');
   }
-  function korMedia(a){
+  function korMedia(a,lbl,nil){
+    lbl=lbl||'Hasil praktik siswa';if(nil===undefined)nil='Siswa tidak mengunggah hasil praktik.';
     var f=(Array.isArray(a)?a:[]).filter(function(x){return x&&typeof x.u==='string'&&/^https?:\/\//i.test(x.u);});
-    if(!f.length)return '<div class="kans nil">Siswa tidak mengunggah hasil praktik.</div>';
-    return '<div class="kmed"><em>Hasil praktik siswa ('+f.length+' berkas):</em><div class="kmg">'+f.map(function(x){
+    if(!f.length)return nil?'<div class="kans nil">'+nil+'</div>':'';
+    return '<div class="kmed"><em>'+lbl+' ('+f.length+' berkas):</em><div class="kmg">'+f.map(function(x){
       var u=esc(x.u),n=esc(x.n||'berkas'),d=driveId(x),vid=x.t==='video'||(!x.t&&/\.(mp4|mov|webm|m4v)(\?|$)/i.test(x.n||x.u||''));
       if(d){
         var view='https://drive.google.com/file/d/'+d+'/view';
@@ -2394,7 +2395,13 @@ a.kls.mt:hover{color:var(--accent);text-decoration:underline}
         if(r&&r.data&&r.data.signedUrl)el.src=r.data.signedUrl;}catch(_){}
     }
   },true);
-  function korItem(b,i,a){
+  /* foto jawaban essay: kerjakan.html menyimpannya di jawaban[].foto = [{u,id,t,n,s}] */
+  function fotoSemua(val){   /* satu set foto untuk seluruh soal essay (disimpan di salah satu butir) */
+    if(!Array.isArray(val))return [];
+    var x=val.filter(function(e){return e&&typeof e==='object'&&Array.isArray(e.foto)&&e.foto.length;})[0];
+    return x?x.foto:[];
+  }
+  function korItem(b,i,a,foto){
     var sc=(b.tipe==='essay'||b.tipe==='praktikum')
       ?'<label class="sin" title="Isi poin untuk jawaban ini"><input class="skin" type="number" inputmode="decimal" min="0" max="'+(+b.skor||0)+'" step="any" data-max="'+(+b.skor||0)+'" aria-label="Poin soal nomor '+(i+1)+'" placeholder="0"><span>/ '+fmtN(+b.skor||0)+' poin</span></label>'
       :'<span class="sc">'+(b.tipe==='tts'?(b.arah==='menurun'?'Menurun':'Mendatar')+' · ':'')+esc(b.skor)+' poin</span>';
@@ -2421,7 +2428,8 @@ a.kls.mt:hover{color:var(--accent);text-decoration:underline}
     }else if(b.tipe==='praktikum'){
       h+=korMedia(a)+'<div class="pkey"><em>Pedoman penilaian:</em> '+esc(b.kunci||'—')+'</div>';
     }else{
-      h+='<div class="kans'+(isBlank(a)?' nil':'')+'"><em>Jawaban siswa:</em>'+(isBlank(a)?'Siswa tidak menjawab.':esc(typeof a==='object'?JSON.stringify(a):a))+'</div>'+
+      var ft=(Array.isArray(foto)?foto:[]).filter(function(x){return x&&typeof x.u==='string';}),noTx=isBlank(a);
+      h+='<div class="kans'+(noTx&&!ft.length?' nil':'')+'"><em>Jawaban siswa:</em>'+(noTx?(ft.length?'Tidak diketik. Lihat foto jawaban siswa di bagian atas.':'Siswa tidak menjawab.'):esc(typeof a==='object'?JSON.stringify(a):a))+'</div>'+
         '<div class="pkey"><em>Pedoman jawaban:</em> '+esc(b.kunci||'—')+'</div>';
     }
     return h+'</div>';
@@ -2458,7 +2466,8 @@ a.kls.mt:hover{color:var(--accent);text-decoration:underline}
       if(!row){$('kBody').innerHTML='<div class="noq">Data pengerjaan siswa tidak ditemukan.</div>';return;}
       var fa=findAnswers(row),warn='';
       if(!fa)warn='<div class="noq">Jawaban siswa tidak ditemukan pada tabel hasil_asesmen. Kolom yang ada: '+esc(Object.keys(row).join(', '))+'.</div>';
-      $('kBody').innerHTML=warn+butir.map(function(b,k){return korItem(b,k,fa?ansOf(fa.val,b,k):undefined);}).join('');
+      var fts=fa?fotoSemua(fa.val):[];
+      $('kBody').innerHTML=warn+korMedia(fts,'Foto jawaban siswa (seluruh soal)','')+butir.map(function(b,k){return korItem(b,k,fa?ansOf(fa.val,b,k):undefined,fts);}).join('');
       korCtx={i:i,row:row,maks:isPr?100:butir.reduce(function(t,b){return t+(+b.skor||0);},0)};
       $('kTot').hidden=false;$('kSend').disabled=false;kRecalc();
     }catch(e){
