@@ -334,17 +334,27 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
     if(/permission denied/i.test(m))return 'Akses data ditolak. Periksa RLS tabel paket_soal dan soal_aktif.';
     return m;
   }
+  var JENIS_KEYS=['jenis_ujian','jenisujian','jenis_asesmen','jenis','tipe_ujian','tipe','kategori'];
+  function isUAS(p){
+    var v=null;
+    for(var i=0;i<JENIS_KEYS.length;i++){if(p[JENIS_KEYS[i]]!=null&&String(p[JENIS_KEYS[i]]).trim()!==''){v=p[JENIS_KEYS[i]];break;}}
+    if(v==null)v=p.judul||'';
+    v=String(v).toLowerCase();
+    return /\buas\b/.test(v)||/akhir\s*semester/.test(v);
+  }
   async function load(){
     loading=true;$('bRefresh').classList.add('spin');
     try{
       if(!db)throw new Error('Supabase tidak tersedia');
       var res=await Promise.all([
-        fetchAll('paket_soal','id,judul,kelas,matapelajaran',[['id',false]]),
+        fetchAll('paket_soal','*',[['id',false]]),
         fetchAll('soal_aktif','id,paket_id,aktif,mulai,selesai',[['id',false]])
       ]);
       var akt={};
       res[1].forEach(function(r){if(!akt[r.paket_id])akt[r.paket_id]=r;});   /* baris terbaru per paket, sama seperti soal.html */
-      cards=res[0].map(function(p){
+      /* Hanya tampilkan ujian berjenis UAS (kolom jenis dikenali otomatis; bila tak ada kolomnya, pakai judul) */
+      var paket=res[0].filter(isUAS);
+      cards=paket.map(function(p){
         var a=akt[p.id]||null;
         return {id:p.id,judul:p.judul||'(Tanpa judul)',kelas:p.kelas||'',mapel:p.matapelajaran||'Tanpa mata pelajaran',akt:a,
           start:a&&a.mulai?+new Date(a.mulai):null,end:a&&a.selesai?+new Date(a.selesai):null};
