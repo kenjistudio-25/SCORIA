@@ -66,6 +66,13 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
 .cd-tg svg{flex:none;width:14px;height:14px;color:var(--muted)}
 .cd-tg span{min-width:0}
 .cd-tg small{display:block;font-size:11.5px;font-weight:500;color:var(--muted)}
+.cd-pg{display:flex;align-items:flex-start;gap:7px;min-width:0;font-size:12px;color:var(--muted)}
+.cd-pg svg{flex:none;width:14px;height:14px;margin-top:1px}
+.cd-pg span{flex:none}
+.cd-pg b{min-width:0;font-weight:700;color:var(--text);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.cd-pg b.kosong{font-weight:500;font-style:italic;color:var(--muted)}
+.cd.live .cd-pg,.cd.soon .cd-pg,.cd.live .cd-pg b,.cd.soon .cd-pg b,.cd.live .cd-pg b.kosong,.cd.soon .cd-pg b.kosong{color:#fff}
+.cd.live .cd-pg span,.cd.soon .cd-pg span{color:rgba(255,255,255,.85)}
 .cd-jm{display:flex;flex-wrap:wrap;gap:6px}
 .cd-jm span{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--track);color:var(--muted);white-space:nowrap}
 .cd-jm span b{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
@@ -173,6 +180,7 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
   .cd-av{width:30px;height:30px;border-radius:9px;font-size:11px}
   .cd-nm b{font-size:13px}
   .cd-jd{font-size:12.5px}
+  .cd-pg{flex-wrap:wrap;row-gap:1px;font-size:11.5px}.cd-pg b{flex-basis:100%;padding-left:21px}
   .cd-ft{flex-direction:column;align-items:flex-start;gap:6px}
   .d .ic{width:50px;height:50px;border-radius:14px}
   .d .ic svg{width:25px;height:25px}
@@ -395,6 +403,24 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
     var x=up.length?up[0]:cand[cand.length-1];
     return {a:hhmm(x.jam_mulai),b:hhmm(x.jam_selesai)};
   }
+  /* Pengawas kartu: cocokkan jadwal_ujian (mata pelajaran + kelas); utamakan tanggal yang sama dengan jadwal kartu, lalu yang akan datang */
+  function pengawasKartu(c){
+    var m=nrm(c.mapel),k=nrm(c.kelas);
+    var cand=jdw.filter(function(x){return nrm(x.mata_pelajaran)===m&&nrm(x.kelas)===k&&String(x.nama_pengawas||'').trim();});
+    if(!cand.length)return '';
+    var tg='';
+    if(c.start){var d=new Date(c.start);tg=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+    var same=tg?cand.filter(function(x){return String(x.tanggal).slice(0,10)===tg;}):[];
+    var pick=same;
+    if(!pick.length){
+      var t=todayStr(),up=cand.filter(function(x){return String(x.tanggal).slice(0,10)>=t;});
+      var base=up.length?up[0]:cand[cand.length-1],bt=String(base.tanggal).slice(0,10);
+      pick=cand.filter(function(x){return String(x.tanggal).slice(0,10)===bt;});
+    }
+    var seen={},names=[];
+    pick.forEach(function(x){var n=String(x.nama_pengawas).trim(),kk=nrm(n);if(!seen[kk]){seen[kk]=1;names.push(n);}});
+    return names.join(', ');
+  }
   function cardHtml(c){
     var st=stateOf(c),g=PAL[hash(c.mapel)%PAL.length].split(',');
     var tgl='<span>Belum dijadwalkan</span>';
@@ -402,12 +428,13 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
       var d=new Date(c.start);
       tgl='<span>'+esc(fmtTgl(d))+(c.end?'<small>'+fmtJam(d)+' – '+fmtJam(new Date(c.end))+' WIB</small>':'<small>'+fmtJam(d)+' WIB</small>')+'</span>';
     }
-    var jm=jamKartu(c);
+    var jm=jamKartu(c),pw=pengawasKartu(c);
     return '<article class="cd '+st+'" role="button" tabindex="0" data-id="'+esc(c.id)+'" aria-label="Mulai mengawas '+esc(c.mapel)+(c.kelas?' kelas '+esc(c.kelas):'')+': '+esc(c.judul)+'" style="--c1:'+g[0]+';--c2:'+g[1]+'">'+
       '<div class="cd-top"><i class="cd-av" aria-hidden="true">'+esc(initials(c.mapel))+'</i>'+
         '<div class="cd-nm"><b title="'+esc(c.mapel)+'">'+esc(c.mapel)+'</b>'+(c.kelas?'<small>Kelas '+esc(c.kelas)+'</small>':'')+'</div></div>'+
       '<h3 class="cd-jd" title="'+esc(c.judul)+'">'+esc(c.judul)+'</h3>'+
       '<div class="cd-jm"><span>Mulai <b>'+(jm.a||'-')+'</b></span><span>Selesai <b>'+(jm.b||'-')+'</b></span></div>'+
+      '<div class="cd-pg" title="'+esc(pw?'Pengawas: '+pw:'Pengawas belum ditentukan')+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.8"/><path d="M4.5 20c.6-3.8 3.6-6 7.5-6s6.9 2.2 7.5 6"/></svg><span>Pengawas</span><b'+(pw?'':' class="kosong"')+'>'+esc(pw||'Belum ditentukan')+'</b></div>'+
       '<div class="cd-ft"><div class="cd-tg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>'+tgl+'</div>'+
       '<em class="cd-st">'+LBL[st]+'</em></div></article>';
   }
