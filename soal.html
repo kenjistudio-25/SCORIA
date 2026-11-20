@@ -584,6 +584,48 @@ a.kls.mt:hover{color:var(--accent);text-decoration:underline}
   .pt-fb body,.pt-fb .wrap{animation:none!important}
   .pt-fb.pt-out body{transition:none}
 }
+
+/* ===== Kartu paket soal: jarak isi ke tepi kontainer simetris (kiri = kanan = atas = bawah) ===== */
+.mc{--in:14px}
+.mb{padding:var(--in);gap:8px}
+.thumb .badge,.thumb .aktif,.thumb .cnt{margin:0}
+.thumb .badge{left:var(--in);top:var(--in)}
+.thumb .cnt{right:var(--in);bottom:var(--in)}
+.thumb .aktif{left:var(--in);bottom:var(--in)}
+.mf{padding-top:0}
+.mf .ab{margin-right:-8px;margin-bottom:-4px;align-self:flex-end}
+.mf .meta{flex:1}
+.mc .act,.mc .act.pr{width:100%;margin-left:0;margin-right:0}
+@media (max-width:520px){
+  .mc{--in:8px}
+  .mb{gap:4px}
+  .mf .ab{margin-right:-5px;margin-bottom:-3px}
+  .thumb .badge,.thumb .cnt,.thumb .aktif{font-size:9px;padding:1px 6px;line-height:1.5}
+}
+
+/* ===== Header daftar soal: judul, filter & pencarian selaras dengan lebar kontainer ===== */
+.listhead{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:var(--lh-gap,16px)}
+.listhead .chips{margin-top:8px}
+.listhead .tools{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;width:100%;align-items:stretch}
+.listhead .tools select,.listhead .tools .search input{width:100%;min-width:0;height:44px;padding:0 13px;font:inherit;font-size:14px;line-height:1.2;border-radius:12px}
+.listhead .tools select{appearance:none;-webkit-appearance:none;padding-right:38px;text-overflow:ellipsis;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238aa0b2' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 13px center;background-size:14px}
+.listhead .tools .search{max-width:none;width:100%;min-width:0}
+@media (max-width:900px){
+  .listhead .tools{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .listhead .tools .search{grid-column:1/-1}
+}
+@media (max-width:520px){
+  .listhead{gap:10px;--lh-gap:12px}
+  .listhead .tools{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .listhead .tools select:nth-of-type(3){grid-column:1/-1}
+  .listhead .tools select,.listhead .tools .search input{height:40px;padding-left:10px;font-size:13.5px}
+  .listhead .tools select{padding-right:32px;background-position:right 10px center}
+}
+/* modal Riwayat: 2 filter + pencarian */
+#shHist .listhead .tools{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr)}
+@media (max-width:900px){#shHist .listhead .tools{grid-template-columns:repeat(2,minmax(0,1fr))}#shHist .listhead .tools .search{grid-column:1/-1}}
 </style>
 <script>
 /* Transisi halaman: halaman baru "keluar" dari tombol yang diklik (seperti membuka jendela dari Dock macOS);
