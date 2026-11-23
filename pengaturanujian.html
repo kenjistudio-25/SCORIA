@@ -58,6 +58,14 @@ td.ac{white-space:nowrap}
 .mini{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;padding:6px 11px;border-radius:9px;background:var(--track);margin-right:6px}
 .mini:hover{background:rgba(120,120,128,.26)}
 .mini.del{color:var(--red)}
+.mini.dup{color:var(--accent);padding:6px 9px}
+.mini.dup svg{width:16px;height:16px}
+.fld input:disabled{background:rgba(120,120,128,.12);color:var(--muted);cursor:not-allowed;-webkit-text-fill-color:var(--muted)}
+.fld.lock>span::after{content:' · terkunci';font-weight:600;opacity:.75}
+.dd.locked .dd-btn{background:rgba(120,120,128,.12);cursor:not-allowed;opacity:.8}
+.dd.locked .dd-chev{display:none}
+.dupinfo{display:none;margin-bottom:12px;padding:10px 12px;border-radius:12px;background:rgba(61,155,224,.1);font-size:13px;color:var(--text)}
+.dupinfo.show{display:block}
 .empty{padding:34px 14px;text-align:center;color:var(--muted);font-size:14px}
 .err{color:var(--red)}
 .upd{font-size:12px;color:var(--muted);margin-top:10px;text-align:right}
@@ -202,14 +210,15 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
 <div class="mbd" id="mbd">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
     <h2 id="mTitle">Tambah Ujian</h2>
-    <p class="sub">Isi jadwal ujian dan pengawas ruangnya.</p>
+    <p class="sub" id="mSub">Isi jadwal ujian dan pengawas ruangnya.</p>
+    <div class="dupinfo" id="dupInfo"></div>
     <div>
-      <label class="fld"><span>Hari / Tanggal</span><input id="fTgl" type="date" required></label>
+      <label class="fld" id="wTgl"><span>Hari / Tanggal</span><input id="fTgl" type="date" required></label>
       <div class="frow">
-        <label class="fld"><span>Waktu Mulai</span><input id="fMulai" type="time" required></label>
-        <label class="fld"><span>Waktu Selesai</span><input id="fSelesai" type="time" required></label>
+        <label class="fld" id="wMulai"><span>Waktu Mulai</span><input id="fMulai" type="time" required></label>
+        <label class="fld" id="wSelesai"><span>Waktu Selesai</span><input id="fSelesai" type="time" required></label>
       </div>
-      <div class="fld"><span>Mata Pelajaran</span><div id="ddMapel"></div><input id="fMapel" type="hidden"></div>
+      <div class="fld" id="wMapel"><span>Mata Pelajaran</span><div id="ddMapel"></div><input id="fMapel" type="hidden"></div>
       <div class="fld"><span>Nama Pengawas</span><div id="ddNama"></div><input id="fNama" type="hidden"></div>
       <label class="fld"><span>NIP</span><input id="fNip" type="text" inputmode="numeric" maxlength="30" autocomplete="off" placeholder="Terisi otomatis dari pengawas"></label>
       <div class="fld"><span>Kelas</span><div id="ddKelas"></div><input id="fKelas" type="hidden"></div>
@@ -242,7 +251,7 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
   var db=window.supabase.createClient(SB_URL,SB_KEY);
   var $=function(i){return document.getElementById(i);};
   var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
-  var rows=[],loadErr='',editId=null,lastFocus=null,saving=false;
+  var rows=[],loadErr='',editId=null,dupSrc=null,lastFocus=null,saving=false;
 
   function fmtTgl(s){
     var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -383,7 +392,8 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
     var api={
       host:host,close:close,
       setItems:function(arr,st,msg){items=arr||[];status=st||'ok';errMsg=msg||'';if(isOpen)renderList();},
-      setValue:function(v){val=v||'';inp.value=val;refreshBtn();}
+      setValue:function(v){val=v||'';inp.value=val;refreshBtn();},
+      setLocked:function(f){close();btn.disabled=!!f;host.classList.toggle('locked',!!f);}
     };
     allDD.push(api);refreshBtn();
     return api;
@@ -462,30 +472,42 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
     el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Hari / Tanggal</th><th>Waktu Mulai</th><th>Waktu Selesai</th><th>Mata Pelajaran</th><th>Nama Pengawas</th><th>NIP</th><th>Kelas</th><th class="ac">Aksi</th></tr></thead><tbody>'+
       list.map(function(r,i){
         return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="tg" data-l="Hari / Tanggal">'+esc(fmtTgl(r.tanggal))+'</td><td class="jam" data-l="Waktu Mulai">'+(fmtJam(r.jam_mulai)||'-')+'</td><td class="jam" data-l="Waktu Selesai">'+(fmtJam(r.jam_selesai)||'-')+'</td><td class="nm" data-l="Mata Pelajaran">'+esc(r.mata_pelajaran)+'</td><td data-l="Pengawas">'+esc(r.nama_pengawas)+'</td><td data-l="NIP">'+(esc(r.nip)||'-')+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td>'+
-          '<td class="ac"><button class="mini" type="button" data-a="edit" data-id="'+esc(r.id)+'">Ubah</button><button class="mini del" type="button" data-a="del" data-id="'+esc(r.id)+'">Hapus</button></td></tr>';
+          '<td class="ac"><button class="mini" type="button" data-a="edit" data-id="'+esc(r.id)+'">Ubah</button><button class="mini dup" type="button" data-a="dup" data-id="'+esc(r.id)+'" title="Duplikat ke ruang lain" aria-label="Duplikat jadwal ke ruang lain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 013 13.5v-9A1.5 1.5 0 014.5 3h9A1.5 1.5 0 0115 4.5V5"/></svg></button><button class="mini del" type="button" data-a="del" data-id="'+esc(r.id)+'">Hapus</button></td></tr>';
       }).join('')+'</tbody></table></div>';
   }
   $('fQ').addEventListener('input',render);
   $('list').addEventListener('click',function(e){
     var b=e.target.closest('button[data-a]');if(!b)return;
     var r=rows.filter(function(x){return String(x.id)===b.dataset.id;})[0];if(!r)return;
-    if(b.dataset.a==='edit')openModal(r);else delRow(r);
+    if(b.dataset.a==='edit')openModal(r);else if(b.dataset.a==='dup')openModal(r,true);else delRow(r);
   });
 
   /* ---------- Modal ---------- */
-  function openModal(r){
-    editId=r?r.id:null;lastFocus=document.activeElement;
-    $('mTitle').textContent=r?'Ubah Ujian':'Tambah Ujian';
+  function setLock(on){
+    ['wTgl','wMulai','wSelesai'].forEach(function(id){$(id).classList.toggle('lock',on);});
+    $('fTgl').disabled=on;$('fMulai').disabled=on;$('fSelesai').disabled=on;
+    ddMapel.setLocked(false);
+  }
+  function openModal(r,dup){
+    dup=!!(r&&dup);
+    editId=(r&&!dup)?r.id:null;dupSrc=dup?r:null;lastFocus=document.activeElement;
+    setLock(dup);
+    $('mTitle').textContent=dup?'Duplikat Jadwal Pengawasan':(r?'Ubah Ujian':'Tambah Ujian');
+    $('mSub').textContent=dup?'Pilih pengawas dan kelas/ruang baru. Mata pelajaran bisa diubah; hari dan waktu mengikuti jadwal asal.':'Isi jadwal ujian dan pengawas ruangnya.';
+    var di=$('dupInfo');
+    if(dup){di.textContent='Jadwal asal: '+fmtTgl(r.tanggal)+' · '+r.mata_pelajaran+' · Kelas '+r.kelas+' · Pengawas '+r.nama_pengawas;di.classList.add('show');}
+    else{di.textContent='';di.classList.remove('show');}
+    $('mSimpan').textContent=dup?'Simpan Duplikat':'Simpan';
     $('fTgl').value=r?String(r.tanggal).slice(0,10):'';
     $('fMulai').value=r?fmtJam(r.jam_mulai):'';
     $('fSelesai').value=r?fmtJam(r.jam_selesai):'';
     ddMapel.setValue(r?r.mata_pelajaran:'');
-    ddNama.setValue(r?r.nama_pengawas:'');
-    $('fNip').value=r?r.nip||'':'';
-    ddKelas.setValue(r?r.kelas:'');
+    ddNama.setValue(r&&!dup?r.nama_pengawas:'');
+    $('fNip').value=r&&!dup?r.nip||'':'';
+    ddKelas.setValue(r&&!dup?r.kelas:'');
     $('fMsg').textContent='';closeAllDD();
     $('mbd').classList.add('show');
-    setTimeout(function(){$('fTgl').focus();},30);
+    setTimeout(function(){(dup?$('ddMapel').querySelector('.dd-btn'):$('fTgl')).focus();},30);
   }
   function closeModal(){
     closeAllDD();
@@ -504,7 +526,7 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
       if(editId&&(!r.data||!r.data.length))throw new Error('Perubahan ditolak (cek policy update di Supabase).');
       closeModal();await load();
     }catch(e){$('fMsg').textContent=errText(e);}
-    finally{saving=false;$('mSimpan').disabled=false;$('mSimpan').textContent='Simpan';}
+    finally{saving=false;$('mSimpan').disabled=false;$('mSimpan').textContent=dupSrc?'Simpan Duplikat':'Simpan';}
   }
   async function delRow(r){
     if(!confirm('Hapus jadwal ini?\n'+fmtTgl(r.tanggal)+' · '+r.mata_pelajaran+' · '+r.kelas))return;
