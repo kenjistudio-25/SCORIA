@@ -45,6 +45,15 @@ h1{font-size:clamp(26px,4.5vw,36px);letter-spacing:-.025em;line-height:1.1}
 .tools input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(74,166,230,.2)}
 .tools .search{flex:1 1 260px}
 
+/* Tab hari */
+.tabs{display:flex;gap:6px;margin-bottom:14px;padding:4px;border-radius:14px;background:var(--track);overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 14px;border-radius:10px;font-size:13.5px;font-weight:650;color:var(--muted);white-space:nowrap;transition:background .15s,color .15s,box-shadow .15s}
+.tab:hover{color:var(--text)}
+.tab[aria-selected="true"]{background:#fff;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.14),0 0 0 .5px var(--line)}
+.tab .n{min-width:20px;padding:1px 6px;border-radius:99px;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums;background:rgba(120,120,128,.18);color:var(--muted)}
+.tab[aria-selected="true"] .n{background:var(--accent);color:#fff}
+
 /* Tabel */
 .tw{overflow-x:auto;border-radius:14px;background:var(--card);box-shadow:0 0 0 .5px var(--line)}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -163,7 +172,7 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
 @media print{
   @page{size:A4 landscape;margin:14mm}
   body{background:#fff!important;padding:0;color:#000}
-  .nav,.dock,.tools,.upd,.head,.mbd,.chip{display:none!important}
+  .nav,.dock,.tools,.tabs,.upd,.head,.mbd,.chip{display:none!important}
   .wrap{max-width:none;padding:0}
   .panel{background:none;box-shadow:none;backdrop-filter:none;border-radius:0}
   .box{padding:0}
@@ -200,6 +209,14 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
     <div class="ph"><b id="phSekolah">Scoria</b><span>Jadwal Ujian &amp; Pengawas Ruang</span></div>
     <div class="tools">
       <div class="search"><input id="fQ" type="search" placeholder="Cari mata pelajaran, pengawas, NIP, atau kelas…" aria-label="Cari jadwal"></div>
+    </div>
+    <div class="tabs" id="dayTabs" role="tablist" aria-label="Filter berdasarkan hari">
+      <button class="tab" type="button" role="tab" aria-selected="true" data-h="all">Semua Hari <span class="n">0</span></button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-h="1">Senin <span class="n">0</span></button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-h="2">Selasa <span class="n">0</span></button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-h="3">Rabu <span class="n">0</span></button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-h="4">Kamis <span class="n">0</span></button>
+      <button class="tab" type="button" role="tab" aria-selected="false" data-h="5">Jum'at <span class="n">0</span></button>
     </div>
     <div id="list"><div class="empty">Memuat…</div></div>
     <p class="upd" id="upd"></p>
@@ -457,18 +474,60 @@ td.jam{white-space:nowrap;font-variant-numeric:tabular-nums}
     }catch(e){loadErr=errText(e);}
     render();
   }
+  var hariAktif='all'; /* 'all' atau 1..5 (Senin..Jum'at) */
+  var NAMA_HARI={1:'Senin',2:'Selasa',3:'Rabu',4:'Kamis',5:"Jum'at"};
+  function hariDari(s){
+    var m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m?new Date(+m[1],+m[2]-1,+m[3]).getDay():-1; /* 0=Minggu ... 6=Sabtu */
+  }
+  function cocokCari(r,q){
+    if(!q)return true;
+    return [r.mata_pelajaran,r.nama_pengawas,r.nip,r.kelas,fmtTgl(r.tanggal),fmtJam(r.jam_mulai),fmtJam(r.jam_selesai)].join(' ').toLowerCase().indexOf(q)>=0;
+  }
   function filtered(){
     var q=$('fQ').value.trim().toLowerCase();
-    if(!q)return rows;
     return rows.filter(function(r){
-      return [r.mata_pelajaran,r.nama_pengawas,r.nip,r.kelas,fmtTgl(r.tanggal),fmtJam(r.jam_mulai),fmtJam(r.jam_selesai)].join(' ').toLowerCase().indexOf(q)>=0;
+      return cocokCari(r,q)&&(hariAktif==='all'||hariDari(r.tanggal)===hariAktif);
     });
   }
+  function updateTabs(){
+    var q=$('fQ').value.trim().toLowerCase(),cnt={all:0,1:0,2:0,3:0,4:0,5:0};
+    rows.forEach(function(r){
+      if(!cocokCari(r,q))return;
+      cnt.all++;
+      var h=hariDari(r.tanggal);if(cnt[h]!==undefined&&h>=1&&h<=5)cnt[h]++;
+    });
+    Array.prototype.forEach.call($('dayTabs').querySelectorAll('.tab'),function(t){
+      var k=t.dataset.h,on=String(hariAktif)===k;
+      t.setAttribute('aria-selected',on?'true':'false');
+      t.tabIndex=on?0:-1;
+      t.querySelector('.n').textContent=cnt[k];
+    });
+  }
+  $('dayTabs').addEventListener('click',function(e){
+    var t=e.target.closest('.tab');if(!t)return;
+    hariAktif=t.dataset.h==='all'?'all':+t.dataset.h;
+    render();
+  });
+  $('dayTabs').addEventListener('keydown',function(e){
+    if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;
+    var tabs=Array.prototype.slice.call($('dayTabs').querySelectorAll('.tab'));
+    var i=tabs.findIndex(function(t){return t.getAttribute('aria-selected')==='true';});
+    i=(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+    tabs[i].click();tabs[i].focus();e.preventDefault();
+  });
   function render(){
     var el=$('list'),list=filtered();
     $('chipTotal').textContent=rows.length+' jadwal';
+    updateTabs();
     if(loadErr){el.innerHTML='<div class="empty err">'+esc(loadErr)+'</div>';return;}
-    if(!list.length){el.innerHTML='<div class="empty">'+(rows.length?'Tidak ada jadwal yang cocok dengan pencarian.':'Belum ada jadwal ujian. Tekan tombol + Ujian untuk menambahkan.')+'</div>';return;}
+    if(!list.length){
+      var pesan;
+      if(!rows.length)pesan='Belum ada jadwal ujian. Tekan tombol + Ujian untuk menambahkan.';
+      else if(hariAktif!=='all'&&!$('fQ').value.trim())pesan='Belum ada jadwal ujian pada hari '+NAMA_HARI[hariAktif]+'.';
+      else pesan='Tidak ada jadwal yang cocok'+(hariAktif!=='all'?' pada hari '+NAMA_HARI[hariAktif]:'')+' dengan pencarian.';
+      el.innerHTML='<div class="empty">'+pesan+'</div>';return;
+    }
     el.innerHTML='<div class="tw"><table><thead><tr><th class="num">No</th><th>Hari / Tanggal</th><th>Waktu Mulai</th><th>Waktu Selesai</th><th>Mata Pelajaran</th><th>Nama Pengawas</th><th>NIP</th><th>Kelas</th><th class="ac">Aksi</th></tr></thead><tbody>'+
       list.map(function(r,i){
         return '<tr><td class="num" data-l="No">'+(i+1)+'</td><td class="tg" data-l="Hari / Tanggal">'+esc(fmtTgl(r.tanggal))+'</td><td class="jam" data-l="Waktu Mulai">'+(fmtJam(r.jam_mulai)||'-')+'</td><td class="jam" data-l="Waktu Selesai">'+(fmtJam(r.jam_selesai)||'-')+'</td><td class="nm" data-l="Mata Pelajaran">'+esc(r.mata_pelajaran)+'</td><td data-l="Pengawas">'+esc(r.nama_pengawas)+'</td><td data-l="NIP">'+(esc(r.nip)||'-')+'</td><td data-l="Kelas">'+esc(r.kelas)+'</td>'+
